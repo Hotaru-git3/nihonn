@@ -50,6 +50,11 @@ export function Sidebar(): string {
             <span class="material-symbols-outlined text-xl">smart_toy</span>
             <span>AI Assist</span>
           </a>
+          <!-- 🔥 QUIZ - NEW -->
+          <a href="/quiz" class="nav-item flex items-center space-x-3 px-4 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-container-high transition-all duration-200 font-medium text-[15px]" data-path="/quiz">
+            <span class="material-symbols-outlined text-xl">quiz</span>
+            <span>Quiz</span>
+          </a>
           <a href="/settings" class="nav-item flex items-center space-x-3 px-4 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-container-high transition-all duration-200 font-medium text-[15px]" data-path="/settings">
             <span class="material-symbols-outlined text-xl">settings</span>
             <span>Settings</span>

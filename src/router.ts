@@ -5,6 +5,7 @@ import { renderLibrary } from './pages/Library';
 import { renderAIBreakdown } from './pages/AIBreakdown';
 import { renderSettings } from './pages/Settings';
 import { renderLogin } from './pages/Login';
+import { renderQuiz } from './pages/Quiz';
 import { updateActiveSidebarNav, loadSidebarData } from './components/Sidebar';
 import { updateActiveBottomNav } from './components/BottomNav';
 
@@ -141,6 +142,9 @@ export function router(): void {
       break;
     case '/ai':
       renderAIBreakdown(mainContent);
+      break;
+    case '/quiz':          // 🔥 NEW
+      renderQuiz(mainContent);
       break;
     case '/settings':
       renderSettings(mainContent);

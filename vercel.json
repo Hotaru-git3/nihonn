@@ -1,0 +1,18 @@
+{
+  "rewrites": [
+    { "source": "/api/quiz/generate", "destination": "/api/quiz/generate" },
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/index.ts": {
+      "memory": 512,
+      "maxDuration": 30,
+      "includeFiles": "!backend/**"
+    },
+    "api/quiz/generate.ts": {
+      "memory": 1024,
+      "maxDuration": 120
+    }
+  }
+}

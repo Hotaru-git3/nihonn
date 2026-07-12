@@ -70,41 +70,121 @@ const getUserRef = () => {
   return doc(db, 'users', auth.currentUser.uid);
 };
 
-// -- Dashboard --
 export async function fetchDashboardStats(): Promise<DashboardStats> {
   const userRef = getUserRef();
-  const logsSnap = await getDocs(collection(userRef, 'study_log'));
-  let totalVocab = 0, totalKanji = 0, totalGrammar = 0;
-  const now = new Date().toISOString().split('T')[0];
-  let todayReviewCount = 0;
+  
+  // Fetch all collections
+  const [vocabSnap, kanjiSnap, grammarSnap, logsSnap] = await Promise.all([
+    getDocs(collection(userRef, 'vocabulary')),
+    getDocs(collection(userRef, 'kanji')),
+    getDocs(collection(userRef, 'grammar')),
+    getDocs(collection(userRef, 'study_log'))
+  ]);
+  
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  
+  let totalVocab = vocabSnap.size;
+  let totalKanji = kanjiSnap.size;
+  let totalGrammar = grammarSnap.size;
+  let dueToday = 0;
+  let reviewedToday = 0;
+  let addedToday = 0;
   let masteredVocab = 0, masteredKanji = 0, masteredGrammar = 0;
-
+  let aiBreakdownsToday = 0;
+  
+  // Process study logs
+  const recentItems: any[] = [];
+  
   logsSnap.forEach(d => {
     const data = d.data();
-    if (data.item_type === 'vocabulary') {
-      totalVocab++;
-      if (data.ease_factor >= 2.5 && data.interval_days > 21) masteredVocab++;
+    
+    // Count due today
+    if (data.next_review && data.next_review <= todayStr) {
+      dueToday++;
     }
-    if (data.item_type === 'kanji') {
-      totalKanji++;
-      if (data.ease_factor >= 2.5 && data.interval_days > 21) masteredKanji++;
+    
+    // Count reviewed today
+    if (data.last_reviewed === todayStr) {
+      reviewedToday++;
     }
-    if (data.item_type === 'grammar') {
-      totalGrammar++;
-      if (data.ease_factor >= 2.5 && data.interval_days > 21) masteredGrammar++;
+    
+    // Mastered items
+    if (data.ease_factor >= 2.5 && data.interval_days > 21) {
+      if (data.item_type === 'vocabulary') masteredVocab++;
+      if (data.item_type === 'kanji') masteredKanji++;
+      if (data.item_type === 'grammar') masteredGrammar++;
     }
-    if (data.next_review && data.next_review <= now) todayReviewCount++;
+    
+    // AI breakdowns
+    if (data.activity_type === 'ai_breakdown' && data.date === todayStr) {
+      aiBreakdownsToday++;
+    }
   });
-
+  
+  // Count added today
+  const countToday = (snap: any) => {
+    snap.forEach((d: any) => {
+      const created = d.data().created_at;
+      if (created && created.startsWith(todayStr)) {
+        addedToday++;
+      }
+      
+      // Collect recent items
+      if (created) {
+        recentItems.push({
+          type: d.data().word ? 'vocabulary' : d.data().character ? 'kanji' : 'grammar',
+          text: d.data().word || d.data().character || d.data().pattern || '',
+          subtext: d.data().meaning || '',
+          created_at: created
+        });
+      }
+    });
+  };
+  
+  countToday(vocabSnap);
+  countToday(kanjiSnap);
+  countToday(grammarSnap);
+  
+  // Sort & limit recent
+  recentItems.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const recentlyAdded = recentItems.slice(0, 5).map(i => ({
+    type: i.type,
+    text: i.text,
+    subtext: i.subtext,
+    created_at: i.created_at
+  }));
+  
+  // Update localStorage untuk streak
+  const lastLoginDate = localStorage.getItem('last_login_date');
+  const streak = parseInt(localStorage.getItem('streak') || '0');
+  let newStreak = streak;
+  if (lastLoginDate) {
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    
+    if (lastLoginDate === yesterdayStr) {
+      newStreak = streak + 1;
+    } else if (lastLoginDate !== todayStr) {
+      newStreak = 1;
+    }
+  } else {
+    newStreak = 1;
+  }
+  localStorage.setItem('streak', newStreak.toString());
+  localStorage.setItem('last_login_date', todayStr);
+  
   return {
-    streak: 0,
+    streak: newStreak,
     total_vocab: totalVocab,
     total_kanji: totalKanji,
     total_grammar: totalGrammar,
-    due_today: todayReviewCount,
-    reviewed_today: 0,
-    added_today: 0,
+    due_today: dueToday,
+    reviewed_today: reviewedToday,
+    added_today: addedToday,
     weekly_activity: [],
+    recently_added: recentlyAdded,
     progress: {
       mastered_vocab: masteredVocab,
       mastered_kanji: masteredKanji,
@@ -116,17 +196,15 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
       vocab_master: masteredVocab >= 100,
       kanji_master: masteredKanji >= 50,
       grammar_master: masteredGrammar >= 50,
-      streak_7: false,
-      streak_30: false,
-      ai_enthusiast: false,
+      streak_7: newStreak >= 7,
+      streak_30: newStreak >= 30,
+      ai_enthusiast: aiBreakdownsToday >= 5,
       n1_hero: false
     },
-    recently_added: [],
-    ai_breakdowns_today: 0
+    ai_breakdowns_today: parseInt(localStorage.getItem(`ai_count_${todayStr}`) || '0')
   };
 }
 
-// -- Review --
 export async function fetchTodayReview(): Promise<ReviewItem[]> {
   const userRef = getUserRef();
   const logsSnap = await getDocs(collection(userRef, 'study_log'));
@@ -136,36 +214,112 @@ export async function fetchTodayReview(): Promise<ReviewItem[]> {
   
   for (const logDoc of logsSnap.docs) {
     const logData = logDoc.data();
+    // Fix: next_review HARUS <= sekarang
     if (logData.next_review && logData.next_review <= now) {
       const itemSnap = await getDoc(doc(userRef, logData.item_type, logData.item_id));
       if (itemSnap.exists()) {
         const itemData = itemSnap.data();
-        let front = '', back = '', reading = '', example = '';
+        let front = '', back = '', reading = '', example = '', example_words = '', example_sentence = '';
+        
         if (logData.item_type === 'vocabulary') {
-          front = itemData.word; back = itemData.meaning; reading = itemData.reading; example = itemData.example_sentence;
+          front = itemData.word || '';
+          back = itemData.meaning || '';
+          reading = itemData.reading || '';
+          example_sentence = itemData.example_sentence || '';
         } else if (logData.item_type === 'kanji') {
-          front = itemData.character; back = itemData.meaning; reading = `${itemData.onyomi} / ${itemData.kunyomi}`; example = itemData.mnemonic;
-        } else {
-          front = itemData.pattern; back = itemData.meaning; reading = itemData.structure; example = itemData.example_sentence;
+          front = itemData.character || '';
+          back = itemData.meaning || '';
+          reading = `${itemData.onyomi || ''} / ${itemData.kunyomi || ''}`;
+          example = itemData.mnemonic || '';
+          example_words = itemData.example_words || '';
+          example_sentence = itemData.example_sentence || '';
+        } else if (logData.item_type === 'grammar') {
+          front = itemData.pattern || '';
+          back = itemData.meaning || '';
+          reading = itemData.structure || '';
+          example_sentence = itemData.example_sentence || '';
         }
         
-        items.push({
-          log_id: logDoc.id,
-          item_type: logData.item_type as any,
-          item_id: logData.item_id,
-          ease_factor: logData.ease_factor,
-          interval_days: logData.interval_days,
-          repetitions: logData.repetitions,
-          front, back, reading, example, extra: logData.item_type
-        });
+        if (front && back) {
+          items.push({
+            log_id: logDoc.id,
+            item_type: logData.item_type as any,
+            item_id: logData.item_id,
+            ease_factor: logData.ease_factor || 2.5,
+            interval_days: logData.interval_days || 0,
+            repetitions: logData.repetitions || 0,
+            front,
+            back,
+            reading,
+            example,
+            example_words,
+            example_sentence,
+            extra: logData.item_type
+          });
+        }
       }
     }
   }
+  
   return items;
 }
 
 export async function fetchRandomReview(): Promise<ReviewItem[]> {
-  return fetchTodayReview();
+  const userRef = getUserRef();
+  const logsSnap = await getDocs(collection(userRef, 'study_log'));
+  
+  const items: ReviewItem[] = [];
+  
+  // AMBIL SEMUA KARTU, abaikan next_review
+  for (const logDoc of logsSnap.docs) {
+    const logData = logDoc.data();
+    const itemSnap = await getDoc(doc(userRef, logData.item_type, logData.item_id));
+    
+    if (itemSnap.exists()) {
+      const itemData = itemSnap.data();
+      let front = '', back = '', reading = '', example = '', example_words = '', example_sentence = '';
+      
+      if (logData.item_type === 'vocabulary') {
+        front = itemData.word || '';
+        back = itemData.meaning || '';
+        reading = itemData.reading || '';
+        example_sentence = itemData.example_sentence || '';
+      } else if (logData.item_type === 'kanji') {
+        front = itemData.character || '';
+        back = itemData.meaning || '';
+        reading = `${itemData.onyomi || ''} / ${itemData.kunyomi || ''}`;
+        example = itemData.mnemonic || '';
+        example_words = itemData.example_words || '';
+        example_sentence = itemData.example_sentence || '';
+      } else if (logData.item_type === 'grammar') {
+        front = itemData.pattern || '';
+        back = itemData.meaning || '';
+        reading = itemData.structure || '';
+        example_sentence = itemData.example_sentence || '';
+      }
+      
+      if (front && back) {
+        items.push({
+          log_id: logDoc.id,
+          item_type: logData.item_type as any,
+          item_id: logData.item_id,
+          ease_factor: logData.ease_factor || 2.5,
+          interval_days: logData.interval_days || 0,
+          repetitions: logData.repetitions || 0,
+          front,
+          back,
+          reading,
+          example,
+          example_words,
+          example_sentence,
+          extra: logData.item_type
+        });
+      }
+    }
+  }
+  
+  // Acak kartu
+  return items.sort(() => Math.random() - 0.5);
 }
 
 export async function submitRating(logId: string, quality: number): Promise<void> {
@@ -280,6 +434,56 @@ export const fetchGrammar = (p=1, s='', j='') => fetchPaginated<Grammar>('gramma
 export const createGrammar = (d: any) => createItem('grammar', d);
 export const updateGrammar = (id: any, d: any) => updateItem('grammar', id, d);
 export const deleteGrammar = (id: any) => deleteItem('grammar', id);
+
+// -- Quiz --
+export async function fetchQuizItems(): Promise<any[]> {
+  const userRef = getUserRef();
+  const [vocabSnap, kanjiSnap, grammarSnap] = await Promise.all([
+    getDocs(collection(userRef, 'vocabulary')),
+    getDocs(collection(userRef, 'kanji')),
+    getDocs(collection(userRef, 'grammar'))
+  ]);
+
+  let items: any[] = [];
+  
+  vocabSnap.forEach(d => {
+    items.push({ ...d.data(), id: d.id, type: 'vocabulary', quiz_count: d.data().quiz_count || 0 });
+  });
+  kanjiSnap.forEach(d => {
+    items.push({ ...d.data(), id: d.id, type: 'kanji', quiz_count: d.data().quiz_count || 0 });
+  });
+  grammarSnap.forEach(d => {
+    items.push({ ...d.data(), id: d.id, type: 'grammar', quiz_count: d.data().quiz_count || 0 });
+  });
+
+  // Sort: quiz_count rendah dulu (item baru), lalu created_at terbaru
+  items.sort((a, b) => {
+    if (a.quiz_count !== b.quiz_count) return a.quiz_count - b.quiz_count;
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  });
+
+  return items.slice(0, 10);
+}
+
+export async function updateQuizCount(items: { type: string; id: string }[]): Promise<void> {
+  const userRef = getUserRef();
+  for (const item of items) {
+    const ref = doc(userRef, item.type, item.id);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const current = snap.data().quiz_count || 0;
+      await updateDoc(ref, { quiz_count: current + 1 });
+    }
+  }
+}
+
+export async function saveQuizResult(result: any): Promise<void> {
+  const userRef = getUserRef();
+  await addDoc(collection(userRef, 'quiz_history'), {
+    ...result,
+    created_at: new Date().toISOString()
+  });
+}
 
 // -- AI --
 export async function analyzeText(text: string): Promise<AIBreakdownResult> {

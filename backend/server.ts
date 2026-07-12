@@ -61,7 +61,7 @@ const authLimiter = rateLimit({
 });
 app.use('/api/auth/', authLimiter);
 
-app.get('/api/firebase-config', (req, res) => {
+app.get(['/api/firebase-config', '/firebase-config'], (req, res) => {
   try {
     const configPath = path.join(__dirname, '../firebase-applet-config.json');
     if (!fs.existsSync(configPath)) {
@@ -90,9 +90,28 @@ const sanitizeInput = (str: any): string => {
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 
-// Initialize Firebase Admin (Uses environment credentials or application default credentials)
+// Initialize Firebase Admin
 if (!getApps().length) {
-  initializeApp();
+  let projectId = undefined;
+  try {
+    const configPath = path.join(__dirname, '../firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      projectId = config.projectId;
+    }
+  } catch (err) {
+    console.warn("Could not load firebase-applet-config.json for admin init:", err);
+  }
+  
+  if (!projectId) {
+    projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
+  }
+
+  if (projectId) {
+    initializeApp({ projectId });
+  } else {
+    initializeApp();
+  }
 }
 
 // Auth Middleware
@@ -114,16 +133,14 @@ const authenticateToken = async (req: express.Request, res: express.Response, ne
 
 // Protect all other API routes
 app.use('/api', (req, res, next) => {
-  if (req.path.startsWith('/auth') || req.path.startsWith('/firebase-config') || req.path.startsWith('/ai/breakdown')) {
+  if (req.path.startsWith('/auth') || req.path.startsWith('/firebase-config') || req.path.startsWith('/ai/breakdown') || req.path.startsWith('/quiz')) {
     return next();
   }
-  // The rest of the routes are no longer used since we migrated to Firebase
-  // but we keep the middleware for completeness
   return res.status(404).json({ error: 'Endpoint migrated to Firebase' });
 });
 
 // --- AI ---
-app.post('/api/ai/breakdown', authenticateToken, async (req, res) => {
+app.post(['/api/ai/breakdown', '/ai/breakdown'], authenticateToken, async (req, res) => {
   try {
     const text = req.body.text;
     
@@ -156,9 +173,39 @@ app.use((req, res, next) => {
   }
 });
 
-const PORT = process.env.NODE_ENV === 'production' ? (process.env.PORT || 3000) : 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+const isDev = process.env.NODE_ENV === 'development';
+const PORT = process.env.PORT || 5000; 
+
+// Quiz generate endpoint
+app.post('/api/quiz/generate', async (req, res) => {
+  try {
+    const { items } = req.body;
+    
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Items required' });
+    }
+
+    // Forward ke Vercel production (atau handle langsung)
+    const response = await fetch('https://nihon.iamdane.me/api/quiz/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items })
+    });
+    
+    const data = await response.json();
+    res.json(data);
+    
+  } catch (err: any) {
+    console.error('Quiz generate error:', err.message);
+    res.status(500).json({ error: 'Failed to generate quiz' });
+  }
 });
+
+// Only listen if not running in a serverless environment like Vercel
+if (process.env.VERCEL_ENV === undefined && process.env.VERCEL === undefined) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
 export default app;
