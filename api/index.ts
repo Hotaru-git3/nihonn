@@ -53,17 +53,17 @@ class AIService {
   constructor() {
     this.models = [
       {
-        name: 'stockmark/stockmark-2-100b-instruct',
-        apiKey: process.env.NVIDIA_API_KEY || '',
-        temperature: 0.05,
-        top_p: 0.5,
-        max_tokens: 2048,
-      },
-      {
         name: 'qwen/qwen3.5-122b-a10b',
         apiKey: process.env.NVIDIA_API_KEY_QWEN || '',
         temperature: 0.6,
         top_p: 0.95,
+        max_tokens: 2048,
+      },
+      {
+        name: 'stockmark/stockmark-2-100b-instruct',
+        apiKey: process.env.NVIDIA_API_KEY || '',
+        temperature: 0.05,
+        top_p: 0.5,
         max_tokens: 2048,
       },
       {
