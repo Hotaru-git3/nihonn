@@ -86,6 +86,7 @@ class AIService {
         const openai = new OpenAI({
           baseURL: 'https://integrate.api.nvidia.com/v1',
           apiKey: modelConfig.apiKey,
+          timeout:25000,
         });
 
         const response = await openai.chat.completions.create({
@@ -96,7 +97,7 @@ class AIService {
           ],
           temperature: modelConfig.temperature,
           top_p: modelConfig.top_p,
-          max_tokens: modelConfig.max_tokens,
+          max_tokens: 1024,
           stream: false,
         });
 
