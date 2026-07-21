@@ -67,7 +67,7 @@ class AIService {
         max_tokens: 2048,
       },
       {
-        name: 'meta/llama-3.3-70b-instruct',
+        name: 'meta/llama-3.1-8b-instruct',
         apiKey: process.env.NVIDIA_API_KEY_LLAMA || '',
         temperature: 0.2,
         top_p: 0.7,
