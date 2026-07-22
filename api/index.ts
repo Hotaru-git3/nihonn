@@ -52,28 +52,35 @@ class AIService {
 
   constructor() {
     this.models = [
-      {
-        name: 'qwen/qwen3.5-122b-a10b',
-        apiKey: process.env.NVIDIA_API_KEY_QWEN || '',
-        temperature: 0.6,
-        top_p: 0.95,
-        max_tokens: 2048,
-      },
-      {
-        name: 'stockmark/stockmark-2-100b-instruct',
-        apiKey: process.env.NVIDIA_API_KEY || '',
-        temperature: 0.05,
-        top_p: 0.5,
-        max_tokens: 2048,
-      },
-      {
-        name: 'meta/llama-3.1-8b-instruct',
-        apiKey: process.env.NVIDIA_API_KEY_LLAMA || '',
-        temperature: 0.2,
-        top_p: 0.7,
-        max_tokens: 1024,
-      },
-    ].filter(m => m.apiKey);
+  {
+    name: 'mistral-medium-3.5-128b',
+    apiKey: process.env.NVIDIA_API_KEY_MISTRAL || '',
+    temperature: 0.2,
+    top_p: 0.7,
+    max_tokens: 1024,
+  },
+  {
+    name: 'meta/llama-3.3-70b-instruct',
+    apiKey: process.env.NVIDIA_API_KEY_LLAMA || '',
+    temperature: 0.2,
+    top_p: 0.7,
+    max_tokens: 1024,
+  },
+  {
+    name: 'meta/llama-3.1-70b-instruct',
+    apiKey: process.env.NVIDIA_API_KEY_LLAMA2 || '',
+    temperature: 0.2,
+    top_p: 0.7,
+    max_tokens: 1024,
+  },
+  {
+    name: 'meta/llama-3.1-8b-instruct',
+    apiKey: process.env.NVIDIA_API_KEY || '',
+    temperature: 0.2,
+    top_p: 0.7,
+    max_tokens: 1024,
+  },
+].filter((m): m is ModelConfig => !!m.apiKey);
   }
 
   async generateBreakdown(text: string): Promise<any> {
