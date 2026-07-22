@@ -53,13 +53,6 @@ class AIService {
   constructor() {
     this.models = [
   {
-    name: 'mistral-medium-3.5-128b',
-    apiKey: process.env.NVIDIA_API_KEY_MISTRAL || '',
-    temperature: 0.2,
-    top_p: 0.7,
-    max_tokens: 1024,
-  },
-  {
     name: 'meta/llama-3.3-70b-instruct',
     apiKey: process.env.NVIDIA_API_KEY_LLAMA || '',
     temperature: 0.2,
@@ -76,6 +69,13 @@ class AIService {
   {
     name: 'meta/llama-3.1-8b-instruct',
     apiKey: process.env.NVIDIA_API_KEY || '',
+    temperature: 0.2,
+    top_p: 0.7,
+    max_tokens: 1024,
+  },
+  {
+    name: 'mistral-medium-3.5-128b',
+    apiKey: process.env.NVIDIA_API_KEY_MISTRAL || '',
     temperature: 0.2,
     top_p: 0.7,
     max_tokens: 1024,
