@@ -1,11 +1,46 @@
-import { fetchTodayReview, fetchRandomReview, submitRating } from '../services/api';
+import { fetchRandomReview, fetchReviewNotMastered, submitRating } from '../services/api';
 import { ReviewItem } from '../types';
 
 let cards: ReviewItem[] = [];
 let currentIndex = 0;
 let isFlipped = false;
+let reviewMode: 'random' | 'not-mastered' = 'random';
 
-export async function renderReview(container: HTMLElement, mode: 'today' | 'random' = 'today') {
+export async function renderReview(container: HTMLElement, mode?: 'random' | 'not-mastered') {
+  if (!mode) {
+    container.innerHTML = `
+      <div class="flex flex-col items-center justify-center h-full space-y-8 animate-fade-in">
+        <div class="text-center">
+          <span class="text-6xl mb-4 block">📚</span>
+          <h2 class="font-headline-lg text-on-surface mb-2">Pilih Mode Review</h2>
+          <p class="font-body-md text-on-surface-variant">Mau review seperti apa hari ini?</p>
+        </div>
+        
+        <div class="flex flex-col gap-4 w-full max-w-sm">
+          <button id="btn-random-review" class="w-full bg-primary text-on-primary py-6 rounded-2xl font-bold text-lg hover:bg-primary/90 transition-all shadow-lg hover:shadow-xl active:scale-[0.98] flex flex-col items-center gap-2">
+            <span class="material-symbols-outlined text-3xl">shuffle</span>
+            <span>Review Acak</span>
+            <span class="text-sm font-normal opacity-80">Semua kartu di-acak</span>
+          </button>
+          
+          <button id="btn-not-mastered-review" class="w-full bg-secondary-container text-on-secondary-container py-6 rounded-2xl font-bold text-lg hover:bg-secondary-container/80 transition-all shadow-lg hover:shadow-xl active:scale-[0.98] flex flex-col items-center gap-2">
+            <span class="material-symbols-outlined text-3xl">school</span>
+            <span>Review Belum Hafal</span>
+            <span class="text-sm font-normal opacity-80">Kartu yang belum dikuasai</span>
+          </button>
+        </div>
+        
+        <a href="/dashboard" class="text-on-surface-variant hover:text-primary transition-colors text-sm">Kembali ke Dashboard</a>
+      </div>
+    `;
+
+    document.getElementById('btn-random-review')?.addEventListener('click', () => renderReview(container, 'random'));
+    document.getElementById('btn-not-mastered-review')?.addEventListener('click', () => renderReview(container, 'not-mastered'));
+    return;
+  }
+
+  reviewMode = mode;
+
   container.innerHTML = `
     <div class="flex items-center justify-center h-full">
       <div class="animate-pulse text-primary"><span class="material-symbols-outlined text-4xl">hourglass_empty</span></div>
@@ -13,10 +48,10 @@ export async function renderReview(container: HTMLElement, mode: 'today' | 'rand
   `;
 
   try {
-    if (mode === 'today') {
-      cards = await fetchTodayReview();
-    } else {
+    if (reviewMode === 'random') {
       cards = await fetchRandomReview();
+    } else {
+      cards = await fetchReviewNotMastered();
     }
     currentIndex = 0;
     isFlipped = false;
@@ -24,21 +59,16 @@ export async function renderReview(container: HTMLElement, mode: 'today' | 'rand
     if (cards.length === 0) {
       container.innerHTML = `
         <div class="flex flex-col items-center justify-center h-full text-center space-y-4">
-          <span class="text-6xl">${mode === 'today' ? '🎉' : '📚'}</span>
-          <h2 class="font-headline-lg text-on-surface">${mode === 'today' ? 'Tidak ada kartu untuk direview hari ini!' : 'Belum ada kartu tersimpan!'}</h2>
-          <p class="font-body-md text-on-surface-variant">${mode === 'today' ? 'Semua kartu sudah direview. Coba review acak untuk mengulang semua materi.' : 'Tambahkan item dulu dari Library atau AI Analyzer.'}</p>
+          <span class="text-6xl">${reviewMode === 'random' ? '📚' : '🎉'}</span>
+          <h2 class="font-headline-lg text-on-surface">${reviewMode === 'random' ? 'Belum ada kartu tersimpan!' : 'Semua kartu sudah dikuasai!'}</h2>
+          <p class="font-body-md text-on-surface-variant">${reviewMode === 'random' ? 'Tambahkan item dulu dari Library atau AI Analyzer.' : 'Kamu hebat! Semua kartu sudah di rating Sangat Mudah.'}</p>
           <div class="flex gap-4 mt-4">
-            <a href="/dashboard" class="px-6 py-2 bg-surface-container-high text-on-surface rounded-lg hover:bg-surface-container-highest transition-colors">Kembali ke Dashboard</a>
-            ${mode === 'today' ? 
-              '<button id="btn-review-acak" class="px-6 py-2 bg-primary text-on-primary rounded-lg shadow hover:bg-primary/90 transition-colors">Review Ulang Acak</button>' : 
-              '<a href="/library" class="px-6 py-2 bg-primary text-on-primary rounded-lg shadow hover:bg-primary/90 transition-colors">Tambah Item</a>'
-            }
+            <a href="/dashboard" class="px-6 py-2 bg-surface-container-high text-on-surface rounded-lg hover:bg-surface-container-highest transition-colors">Dashboard</a>
+            <button id="btn-back-mode" class="px-6 py-2 bg-primary text-on-primary rounded-lg shadow hover:bg-primary/90 transition-colors">Pilih Mode Lain</button>
           </div>
         </div>
       `;
-      document.getElementById('btn-review-acak')?.addEventListener('click', () => {
-        renderReview(container, 'random');
-      });
+      document.getElementById('btn-back-mode')?.addEventListener('click', () => renderReview(container));
       return;
     }
     
@@ -61,14 +91,12 @@ function renderCurrentCard(container: HTMLElement) {
         <h2 class="font-headline-lg text-on-surface">Review Selesai!</h2>
         <p class="font-body-md text-on-surface-variant">Kerja bagus menyelesaikan sesi ini.</p>
         <div class="flex gap-4 mt-4">
-          <a href="/dashboard" class="px-6 py-2 bg-surface-container-high text-on-surface rounded-lg hover:bg-surface-container-highest transition-colors">Kembali ke Dashboard</a>
-          <button id="btn-review-acak-end" class="px-6 py-2 bg-primary text-on-primary rounded-lg shadow hover:bg-primary/90 transition-colors">Review Ulang Acak</button>
+          <a href="/dashboard" class="px-6 py-2 bg-surface-container-high text-on-surface rounded-lg hover:bg-surface-container-highest transition-colors">Dashboard</a>
+          <button id="btn-back-mode-end" class="px-6 py-2 bg-primary text-on-primary rounded-lg shadow hover:bg-primary/90 transition-colors">Pilih Mode Lain</button>
         </div>
       </div>
     `;
-    document.getElementById('btn-review-acak-end')?.addEventListener('click', () => {
-      renderReview(container, 'random');
-    });
+    document.getElementById('btn-back-mode-end')?.addEventListener('click', () => renderReview(container));
     return;
   }
 
@@ -83,7 +111,7 @@ function renderCurrentCard(container: HTMLElement) {
   container.innerHTML = `
     <header class="w-full px-main_padding pt-10 pb-6 flex flex-col items-center justify-center">
       <div class="w-full max-w-2xl text-center">
-        <p class="font-label-sm text-label-sm text-on-surface-variant mb-3 tracking-widest uppercase">Sesi Review</p>
+        <p class="font-label-sm text-label-sm text-on-surface-variant mb-3 tracking-widest uppercase">Sesi Review - ${reviewMode === 'random' ? 'Acak' : 'Belum Hafal'}</p>
         <div class="flex justify-between items-end mb-2">
           <h2 class="font-headline-md text-headline-md text-on-surface font-semibold">Kartu ${currentIndex + 1} dari ${cards.length}</h2>
           <span class="font-label-sm text-label-sm text-brand-c7756b font-semibold">${progress}%</span>
@@ -98,17 +126,14 @@ function renderCurrentCard(container: HTMLElement) {
       <div class="w-full max-w-[420px] aspect-[4/5] sm:aspect-[420/300] perspective-1000 cursor-pointer group" id="flashcard-container">
         <div class="flashcard-inner transform-style-3d shadow-ambient rounded-flashcard bg-white border border-outline-variant/30" id="flashcard-inner">
           
-          <!-- Front -->
           <div class="flashcard-front backface-hidden flex flex-col items-center justify-center p-6 sm:p-8 bg-white rounded-flashcard h-full w-full absolute top-0 left-0 overflow-y-auto">
             <div class="text-center space-y-2 w-full flex flex-col items-center justify-center m-auto">
               <h3 class="font-display-jp text-on-surface font-bold leading-tight break-words w-full text-balance ${card.front.length > 8 ? 'text-2xl sm:text-[28px]' : 'text-3xl sm:text-[48px]'}">${card.front}</h3>
             </div>
           </div>
           
-          <!-- Back -->
           <div class="flashcard-back backface-hidden rotate-y-180 flex flex-col items-center justify-center p-6 sm:p-8 bg-white rounded-flashcard h-full w-full absolute top-0 left-0 border border-outline-variant/30 overflow-y-auto">
             <div class="w-full flex flex-col h-full items-center justify-center space-y-4">
-              
               <div class="text-center w-full flex flex-col items-center justify-center mb-4">
                 ${card.reading ? `<span class="block font-japanese-text text-base sm:text-lg text-on-surface-variant tracking-wider opacity-80 break-words w-full text-balance mb-2">${card.reading}</span>` : ''}
                 <h3 class="font-headline-lg text-xl sm:text-[28px] text-on-surface font-bold leading-tight break-words text-balance mb-3">${card.back}</h3>
@@ -119,62 +144,38 @@ function renderCurrentCard(container: HTMLElement) {
               
               ${(card.example_sentence || card.example || card.example_words) ? `
               <div class="w-full mt-auto pt-4 border-t border-outline-variant/30 text-center space-y-3">
-                ${card.example_sentence ? `
-                  <div class="w-full">
-                    <p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Contoh Kalimat</p>
-                    <p class="font-japanese-text text-sm sm:text-md text-on-surface leading-snug">${card.example_sentence}</p>
-                  </div>
-                ` : ''}
-                ${card.example ? `
-                  <div class="w-full">
-                    <p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">${card.item_type === 'kanji' ? 'Mnemonic / Info' : 'Contoh Tambahan'}</p>
-                    <p class="font-japanese-text text-sm sm:text-md text-on-surface leading-snug">${card.example}</p>
-                  </div>
-                ` : ''}
-                ${card.example_words ? `
-                  <div class="w-full bg-surface-container-low p-3 rounded-lg border border-outline-variant/20">
-                    <p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Kosakata Terkait</p>
-                    <p class="font-japanese-text text-xs sm:text-sm text-on-surface-variant leading-snug break-words whitespace-pre-wrap">${card.example_words}</p>
-                  </div>
-                ` : ''}
-              </div>
-              ` : ''}
-              
+                ${card.example_sentence ? `<div class="w-full"><p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Contoh Kalimat</p><p class="font-japanese-text text-sm sm:text-md text-on-surface leading-snug">${card.example_sentence}</p></div>` : ''}
+                ${card.example ? `<div class="w-full"><p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">${card.item_type === 'kanji' ? 'Mnemonic / Info' : 'Contoh Tambahan'}</p><p class="font-japanese-text text-sm sm:text-md text-on-surface leading-snug">${card.example}</p></div>` : ''}
+                ${card.example_words ? `<div class="w-full bg-surface-container-low p-3 rounded-lg border border-outline-variant/20"><p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Kosakata Terkait</p><p class="font-japanese-text text-xs sm:text-sm text-on-surface-variant leading-snug break-words whitespace-pre-wrap">${card.example_words}</p></div>` : ''}
+              </div>` : ''}
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 🔥 CANVAS - Always visible with fixed size -->
       <div class="mt-4 w-full max-w-[420px]" id="drawing-area">
         <p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider mb-1 text-center">✍️ Latihan Tulis</p>
         <canvas id="kanji-canvas" width="420" height="160" class="w-full bg-surface-container-low rounded-xl border border-outline-variant/30" style="touch-action:none;height:160px;"></canvas>
         <button id="btn-clear-canvas" class="mt-2 text-xs text-on-surface-variant hover:text-error transition-colors w-full py-1">Hapus</button>
       </div>
 
-      <!-- Pre-Flip -->
       <div class="mt-4 sm:mt-6 transition-opacity duration-300 w-full max-w-[420px] flex justify-center px-4 sm:px-0" id="pre-flip-actions">
         <button id="btn-flip" class="px-8 py-3 rounded-xl border-2 border-brand-c7756b text-brand-c7756b font-label-sm text-sm font-semibold tracking-wider hover:bg-brand-c7756b hover:text-white transition-all duration-300 w-full sm:w-auto shadow-sm hover:shadow-md">
             BALIK KARTU
         </button>
       </div>
 
-      <!-- Post-Flip Rating -->
       <div class="mt-4 sm:mt-6 hidden w-full max-w-2xl flex-col items-center fade-in-slide-up px-2 sm:px-0" id="post-flip-actions">
         <p class="font-body-md text-sm sm:text-base text-on-surface-variant mb-4 sm:mb-6 text-center">Seberapa baik kamu ingat materi ini?</p>
-        <div class="flex flex-wrap justify-center gap-2 sm:gap-3 w-full">
-          ${[
-            { label: 'Lupa', color: 'bg-rating-lupa', q: 1 },
-            { label: 'Susah', color: 'bg-rating-susah', q: 2 },
-            { label: 'Hampir', color: 'bg-rating-hampir', q: 3 },
-            { label: 'Mudah', color: 'bg-rating-mudah', q: 4 },
-            { label: 'Sangat<br>Mudah', color: 'bg-rating-sangat-mudah', q: 5 }
-          ].map(btn => `
-            <button class="rating-btn flex-1 min-w-[60px] sm:min-w-[100px] flex flex-col items-center py-3 sm:py-4 px-1 sm:px-2 rounded-xl border border-outline-variant/30 bg-white hover:border-primary group transition-all" data-q="${btn.q}">
-              <div class="w-3 h-3 rounded-full ${btn.color} mb-1 sm:mb-2 group-hover:scale-125 transition-transform"></div>
-              <span class="font-label-sm text-[10px] sm:text-[12px] font-medium text-on-surface-variant text-center leading-tight">${btn.label}</span>
-            </button>
-          `).join('')}
+        <div class="flex gap-3 w-full">
+          <button class="rating-btn flex-1 flex flex-col items-center py-4 px-2 rounded-xl border-2 border-error/30 bg-error/5 hover:bg-error/10 hover:border-error group transition-all" data-q="1">
+            <span class="text-2xl mb-1">❌</span>
+            <span class="font-label-sm text-sm font-semibold text-error">Belum Hafal</span>
+          </button>
+          <button class="rating-btn flex-1 flex flex-col items-center py-4 px-2 rounded-xl border-2 border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-500 group transition-all" data-q="4">
+            <span class="text-2xl mb-1">✅</span>
+            <span class="font-label-sm text-sm font-semibold text-green-600">Hafal</span>
+          </button>
         </div>
       </div>
     </section>
@@ -185,12 +186,11 @@ function renderCurrentCard(container: HTMLElement) {
   
   document.querySelectorAll('.rating-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
-      const q = parseInt((e.currentTarget as HTMLElement).getAttribute('data-q') || '0');
+      const q = parseInt((e.currentTarget as HTMLElement).getAttribute('data-q') || '4');
       await handleRating(q, container);
     });
   });
 
-  // 🔥 Setup canvas
   setTimeout(() => setupCanvas(), 100);
 }
 
@@ -210,21 +210,18 @@ function setupCanvas() {
   let isDrawing = false;
   let lastX = 0, lastY = 0;
 
-  // 🔥 UNIFIED: Mouse + Touch
   function getPos(e: MouseEvent | TouchEvent) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     
     if ('touches' in e) {
-      // Touch
       if (e.touches.length === 0) return null;
       return {
         x: (e.touches[0].clientX - rect.left) * scaleX,
         y: (e.touches[0].clientY - rect.top) * scaleY
       };
     } else {
-      // Mouse
       return {
         x: (e.clientX - rect.left) * scaleX,
         y: (e.clientY - rect.top) * scaleY
@@ -253,12 +250,10 @@ function setupCanvas() {
 
   function onEnd() { isDrawing = false; }
 
-  // Touch events
   canvas.addEventListener('touchstart', onStart, { passive: false });
   canvas.addEventListener('touchmove', onMove, { passive: false });
   canvas.addEventListener('touchend', onEnd);
 
-  // Mouse events
   canvas.addEventListener('mousedown', onStart);
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseup', onEnd);
@@ -292,7 +287,7 @@ async function handleRating(quality: number, container: HTMLElement) {
   try {
     await submitRating(card.log_id, quality);
   } catch (err) {
-    console.error("Rating failed", err);
+    console.error('Rating failed', err);
   }
   
   currentIndex++;

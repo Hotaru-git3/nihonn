@@ -370,6 +370,69 @@ export async function fetchRandomReview(): Promise<ReviewItem[]> {
   return items.sort(() => Math.random() - 0.5);
 }
 
+export async function fetchReviewNotMastered(): Promise<ReviewItem[]> {
+  const userRef = getUserRef();
+  const logsSnap = await getDocs(collection(userRef, 'study_log'));
+  
+  const items: ReviewItem[] = [];
+  
+  for (const logDoc of logsSnap.docs) {
+    const logData = logDoc.data();
+    
+    // Skip kartu yang belum pernah di-review
+    if (logData.response_quality === undefined) continue;
+    // Skip kartu yang sudah Hafal (quality >= 4)
+    if (logData.response_quality >= 4) continue;
+    
+    const itemSnap = await getDoc(doc(userRef, logData.item_type, logData.item_id));
+    if (itemSnap.exists()) {
+      const itemData = itemSnap.data();
+      if (itemData.archived) continue;
+      
+      let front = '', back = '', reading = '', example = '', example_words = '', example_sentence = '';
+      
+      if (logData.item_type === 'vocabulary') {
+        front = itemData.word || '';
+        back = itemData.meaning || '';
+        reading = itemData.reading || '';
+        example_sentence = itemData.example_sentence || '';
+      } else if (logData.item_type === 'kanji') {
+        front = itemData.character || '';
+        back = itemData.meaning || '';
+        reading = `${itemData.onyomi || ''} / ${itemData.kunyomi || ''}`;
+        example = itemData.mnemonic || '';
+        example_words = itemData.example_words || '';
+        example_sentence = itemData.example_sentence || '';
+      } else if (logData.item_type === 'grammar') {
+        front = itemData.pattern || '';
+        back = itemData.meaning || '';
+        reading = itemData.structure || '';
+        example_sentence = itemData.example_sentence || '';
+      }
+      
+      if (front && back) {
+        items.push({
+          log_id: logDoc.id,
+          item_type: logData.item_type as any,
+          item_id: logData.item_id,
+          ease_factor: logData.ease_factor || 2.5,
+          interval_days: logData.interval_days || 0,
+          repetitions: logData.repetitions || 0,
+          front,
+          back,
+          reading,
+          example,
+          example_words,
+          example_sentence,
+          extra: logData.item_type
+        });
+      }
+    }
+  }
+  
+  return items.sort(() => Math.random() - 0.5);
+}
+
 export async function submitRating(logId: string, quality: number): Promise<void> {
   const userRef = getUserRef();
   const logRef = doc(userRef, 'study_log', logId);
