@@ -1,15 +1,20 @@
 import { fetchQuizItems, updateQuizCount, saveQuizResult } from '../services/api';
 
 interface QuizQuestion {
-  sentence: string;
-  romaji: string;
+  itemId: string;
+  type: string;
+  target: string;
+  context: string;
+  prompt: string;
+  correctAnswer: string;
+  choices: string[];
 }
 
 let questions: QuizQuestion[] = [];
 let currentQuestion = 0;
 let score = 0;
 let userAnswers: { sentence: string; userAnswer: string; correctAnswer: string }[] = [];
-let itemsUsed: { type: string; id: string; word: string }[] = [];
+let itemsUsed: { type: string; id: string; target: string; reading: string; word: string; meaning: string; example_sentence: string }[] = [];
 let sessionId: string = "";
 
 function normalizeAnswer(text: string): string {
@@ -19,6 +24,48 @@ function normalizeAnswer(text: string): string {
     .replace(/[.,。、！？!?\s]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[character] || character));
+}
+
+function shuffle<T>(values: T[]): T[] {
+  return [...values].sort(() => Math.random() - 0.5);
+}
+
+function buildQuestions(items: typeof itemsUsed): QuizQuestion[] {
+  return items
+    .filter((item) => item.meaning.trim())
+    .map((item) => {
+      const sameTypeMeanings = items
+        .filter((candidate) => candidate.type === item.type && candidate.id !== item.id && candidate.meaning.trim())
+        .map((candidate) => candidate.meaning.trim())
+        .filter((meaning, index, meanings) => meanings.indexOf(meaning) === index);
+      const otherMeanings = items
+        .filter((candidate) => candidate.id !== item.id && candidate.meaning.trim())
+        .map((candidate) => candidate.meaning.trim())
+        .filter((meaning, index, meanings) => meanings.indexOf(meaning) === index);
+      const distractors = sameTypeMeanings.length >= 2 ? sameTypeMeanings : [...sameTypeMeanings, ...otherMeanings];
+      const choices = shuffle([item.meaning.trim(), ...shuffle(distractors).slice(0, 3)]);
+      const typeLabel = item.type === 'kanji' ? 'kanji' : item.type === 'grammar' ? 'pola tata bahasa' : 'kosakata';
+
+      return {
+        itemId: item.id,
+        type: item.type,
+        target: item.target,
+        context: item.example_sentence?.trim() || '',
+        prompt: `Apa arti ${typeLabel} ini?`,
+        correctAnswer: item.meaning.trim(),
+        choices,
+      };
+    });
 }
 
 export async function renderQuiz(container: HTMLElement) {
@@ -46,25 +93,26 @@ export async function renderQuiz(container: HTMLElement) {
       return;
     }
 
-    itemsUsed = items.map((i) => ({ type: i.type, id: i.id, word: i.word || i.character || i.pattern }));
+    itemsUsed = items.map((i) => ({
+      type: i.type,
+      id: i.id,
+      target: i.word || i.character || i.pattern,
+      reading: i.reading || i.onyomi || i.kunyomi || i.structure || '',
+      word: i.word || i.character || i.pattern,
+      meaning: i.meaning || '',
+      example_sentence: i.example_sentence || '',
+    }));
 
-    const res = await fetch("https://nihon.iamdane.me/api/quiz/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: itemsUsed }),
-    });
-
-    if (!res.ok) throw new Error("Gagal generate soal");
-
-    const data = await res.json();
-    questions = data.sentences;
+    questions = buildQuestions(itemsUsed);
+    if (questions.length < 3) {
+      throw new Error("Minimal 3 item harus memiliki arti untuk quiz.");
+    }
     
     currentQuestion = 0;
     score = 0;
     userAnswers = [];
     sessionId = `quiz_${Date.now()}`;
 
-    await updateQuizCount(itemsUsed);
     renderQuestion(container);
     
   } catch (error) {
@@ -90,6 +138,12 @@ function renderQuestion(container: HTMLElement) {
   const progress = Math.round((currentQuestion / questions.length) * 100);
   const qNumber = currentQuestion + 1;
   const total = questions.length;
+  const choices = q.choices.map((choice, index) => `
+    <button class="quiz-choice w-full text-left bg-surface-container-low border border-outline-variant rounded-xl px-5 py-4 text-base hover:border-primary hover:bg-primary/5 transition-all" data-choice-index="${index}">
+      <span class="inline-flex items-center justify-center w-7 h-7 rounded-full border border-outline-variant mr-3 text-sm">${String.fromCharCode(65 + index)}</span>
+      ${escapeHtml(choice)}
+    </button>
+  `).join('');
 
   container.innerHTML = `
     <div class="max-w-2xl mx-auto space-y-6 animate-fade-in">
@@ -104,50 +158,32 @@ function renderQuestion(container: HTMLElement) {
       </div>
 
       <div class="bg-surface rounded-2xl border border-outline-variant p-8 shadow-lg text-center space-y-6">
-        <span class="text-sm text-on-surface-variant uppercase tracking-widest">Tulis romaji dari kalimat ini</span>
-        <h1 class="font-japanese-text text-3xl sm:text-4xl font-bold text-on-surface leading-relaxed">${q.sentence}</h1>
-        
-        <div class="space-y-3">
-          <input 
-            id="quiz-answer" 
-            type="text" 
-            class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-5 py-4 text-lg text-center focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all" 
-            placeholder="Ketik romaji..."
-            autocomplete="off"
-          />
-          <button id="btn-check" class="w-full bg-primary text-on-primary py-4 rounded-xl font-bold text-lg hover:bg-primary/90 transition-all shadow-md hover:shadow-lg active:scale-[0.98]">
-            CEK JAWABAN
-          </button>
-        </div>
+        <span class="text-sm text-on-surface-variant uppercase tracking-widest">Pahami konteksnya</span>
+        <h1 class="font-japanese-text text-3xl sm:text-4xl font-bold text-on-surface leading-relaxed">${escapeHtml(q.target)}</h1>
+        ${q.context ? `<div class="bg-surface-container-low rounded-xl p-4"><p class="text-xs text-on-surface-variant uppercase tracking-wide mb-2">Contoh penggunaan</p><p class="font-japanese-text text-lg text-on-surface">${escapeHtml(q.context)}</p></div>` : ''}
+        <p class="text-base font-semibold text-on-surface">${q.prompt}</p>
+        <div class="space-y-3 text-left">${choices}</div>
       </div>
     </div>
   `;
 
-  const answerInput = document.getElementById("quiz-answer") as HTMLInputElement;
-  const btnCheck = document.getElementById("btn-check");
-  answerInput?.focus();
-  
-  answerInput?.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") checkAnswer(q, answerInput.value, container);
-  });
-
-  btnCheck?.addEventListener("click", () => {
-    checkAnswer(q, answerInput.value, container);
+  document.querySelectorAll<HTMLButtonElement>('.quiz-choice').forEach((choice) => {
+    choice.addEventListener('click', () => {
+      const choiceIndex = Number(choice.dataset.choiceIndex);
+      checkAnswer(q, q.choices[choiceIndex] || '', container);
+    });
   });
 }
 
 function checkAnswer(q: QuizQuestion, userAnswer: string, container: HTMLElement) {
-  const normalizedUser = normalizeAnswer(userAnswer);
-  const normalizedCorrect = normalizeAnswer(q.romaji);
-  
-  const isCorrect = normalizedUser === normalizedCorrect;
+  const isCorrect = normalizeAnswer(userAnswer) === normalizeAnswer(q.correctAnswer);
 
   if (isCorrect) score += 10;
 
   userAnswers.push({
-    sentence: q.sentence,
+    sentence: q.target,
     userAnswer: userAnswer || "(tidak dijawab)",
-    correctAnswer: q.romaji,
+    correctAnswer: q.correctAnswer,
   });
 
   container.innerHTML = `
@@ -158,8 +194,9 @@ function checkAnswer(q: QuizQuestion, userAnswer: string, container: HTMLElement
         
         <div class="space-y-3">
           <div class="bg-surface-container-low rounded-xl p-4">
-            <p class="font-japanese-text text-xl mb-2">${q.sentence}</p>
-            <p class="text-on-surface-variant text-sm">${q.romaji}</p>
+            <p class="font-japanese-text text-xl mb-2">${escapeHtml(q.target)}</p>
+            <p class="text-xs text-on-surface-variant uppercase tracking-wide mb-1">Jawaban benar</p>
+            <p class="text-on-surface-variant text-sm">${escapeHtml(q.correctAnswer)}</p>
           </div>
           
           ${!isCorrect ? `
@@ -190,6 +227,7 @@ async function renderResult(container: HTMLElement) {
   const percentage = Math.round((score / (total * 10)) * 100);
 
   try {
+    await updateQuizCount(itemsUsed);
     await saveQuizResult({
       session_id: sessionId,
       score,
@@ -225,9 +263,6 @@ async function renderResult(container: HTMLElement) {
                 <p class="font-japanese-text font-bold">${a.sentence}</p>
                 <p class="text-sm text-error mt-1">Kamu: ${a.userAnswer}</p>
                 <p class="text-sm text-green-600">Benar: ${a.correctAnswer}</p>
-                <button class="btn-save-sentence mt-2 inline-flex items-center gap-1 text-xs text-secondary hover:text-secondary/80 transition-colors border border-secondary px-2 py-1 rounded-md" data-sentence="${a.sentence.replace(/'/g, "&#39;")}" data-romaji="${a.correctAnswer.replace(/'/g, "&#39;")}">
-                  <span class="material-symbols-outlined text-[16px]">bookmark_add</span> Simpan ke Library
-                </button>
               </div>
             `).join("")}
           </div>
@@ -240,36 +275,6 @@ async function renderResult(container: HTMLElement) {
       </div>
     </div>
   `;
-
-  // Event: Simpan kalimat ke Library
-  document.querySelectorAll('.btn-save-sentence').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const target = e.currentTarget as HTMLElement;
-      const sentence = target.getAttribute('data-sentence') || '';
-      const romaji = target.getAttribute('data-romaji') || '';
-      
-      if (!sentence) return;
-      
-      try {
-        const { createGrammar } = await import('../services/api');
-        await createGrammar({
-          pattern: sentence,
-          meaning: romaji,
-          structure: 'kalimat',
-          jlpt_level: 'N5',
-          example_sentence: sentence
-        });
-        
-        target.innerHTML = '✅ Tersimpan';
-        target.classList.add('text-green-600', 'border-green-600');
-        target.classList.remove('hover:text-secondary/80');
-        (target as HTMLButtonElement).disabled = true;
-      } catch (err) {
-        target.innerHTML = '❌ Gagal';
-        console.error(err);
-      }
-    });
-  });
 
   document.getElementById("btn-retake")?.addEventListener("click", () => renderQuiz(container));
 }

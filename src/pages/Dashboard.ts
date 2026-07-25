@@ -71,6 +71,17 @@ export async function renderDashboard(container: HTMLElement) {
     const stats = await fetchDashboardStats();
     const dailyGoal = parseInt(localStorage.getItem('daily_goal') || '20');
     const jlptTarget = localStorage.getItem('jlpt_target') || 'N5';
+    const achievementItems = [
+      { icon: 'wb_sunny', label: 'Early Bird', earned: stats.achievements?.early_bird },
+      { icon: 'bedtime', label: 'Night Owl', earned: stats.achievements?.night_owl },
+      { icon: 'menu_book', label: 'Vocab Master', earned: stats.achievements?.vocab_master },
+      { icon: 'school', label: 'Kanji Master', earned: stats.achievements?.kanji_master },
+      { icon: 'psychology', label: 'Grammar Pro', earned: stats.achievements?.grammar_master },
+      { icon: 'local_fire_department', label: '7 Day Streak', earned: stats.achievements?.streak_7 },
+      { icon: 'hotel_class', label: '30 Day Streak', earned: stats.achievements?.streak_30 },
+      { icon: 'smart_toy', label: 'AI Fan', earned: stats.achievements?.ai_enthusiast },
+      { icon: 'military_tech', label: 'N1 Hero', earned: stats.achievements?.n1_hero },
+    ];
     
     container.innerHTML = `
       <header class="flex justify-between items-start mb-10 mt-4 sm:mt-0">
@@ -147,17 +158,7 @@ export async function renderDashboard(container: HTMLElement) {
           <div class="bg-surface rounded-xl border border-outline-variant p-stack_md shadow-sm mt-gutter">
             <h3 class="font-headline-md text-body-lg font-semibold text-on-background mb-4 border-b border-outline-variant pb-2">Pencapaian</h3>
             <div class="flex flex-wrap justify-center gap-4 py-2">
-              ${[
-                { icon: 'wb_sunny', label: 'Early Bird', earned: stats.achievements?.early_bird },
-                { icon: 'bedtime', label: 'Night Owl', earned: stats.achievements?.night_owl },
-                { icon: 'menu_book', label: 'Vocab Master', earned: stats.achievements?.vocab_master },
-                { icon: 'school', label: 'Kanji Master', earned: stats.achievements?.kanji_master },
-                { icon: 'psychology', label: 'Grammar Pro', earned: stats.achievements?.grammar_master },
-                { icon: 'local_fire_department', label: '7 Day Streak', earned: stats.achievements?.streak_7 },
-                { icon: 'hotel_class', label: '30 Day Streak', earned: stats.achievements?.streak_30 },
-                { icon: 'smart_toy', label: 'AI Fan', earned: stats.achievements?.ai_enthusiast },
-                { icon: 'military_tech', label: 'N1 Hero', earned: stats.achievements?.n1_hero },
-              ].map(a => `
+              ${achievementItems.map(a => `
                 <div class="flex flex-col items-center space-y-1">
                   <div class="w-12 h-12 rounded-full ${a.earned ? 'bg-rupiahku-brown/20 text-rupiahku-brown' : 'bg-surface-container-highest text-on-surface-variant opacity-40 grayscale'} flex items-center justify-center transition-all duration-300">
                     <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">${a.icon}</span>

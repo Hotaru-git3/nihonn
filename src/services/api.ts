@@ -2,7 +2,7 @@
 import { DashboardStats, ReviewItem, PaginatedResponse, Vocabulary, Kanji, Grammar, AIBreakdownResult } from '../types';
 import { db, auth } from '../firebase';
 import { collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 
 const BASE = '/api';
 
@@ -60,6 +60,39 @@ export async function logoutUser() {
   localStorage.removeItem('user_display_name');
   
   // 🔥 Redirect ke login
+  window.location.href = '/login';
+}
+
+export async function deleteAllUserData(): Promise<void> {
+  const userRef = getUserRef();
+  const collectionsToClear = ['vocabulary', 'kanji', 'grammar', 'study_log', 'quiz_history'];
+
+  for (const colName of collectionsToClear) {
+    const snap = await getDocs(collection(userRef, colName));
+    await Promise.all(snap.docs.map(docSnap => deleteDoc(doc(userRef, colName, docSnap.id))));
+  }
+
+  localStorage.removeItem('streak');
+  localStorage.removeItem('last_login_date');
+  const aiKeys = Object.keys(localStorage).filter(k => k.startsWith('ai_count_'));
+  aiKeys.forEach(k => localStorage.removeItem(k));
+}
+
+export async function deleteUserAccount(password?: string): Promise<void> {
+  const currentUser = getAuth().currentUser;
+  if (!currentUser || !currentUser.email) throw new Error('Tidak ada user yang aktif');
+
+  if (password) {
+    const credential = EmailAuthProvider.credential(currentUser.email, password);
+    await reauthenticateWithCredential(currentUser, credential);
+  }
+
+  await deleteAllUserData();
+  await deleteUser(currentUser);
+
+  localStorage.removeItem('token');
+  localStorage.removeItem('email');
+  localStorage.removeItem('user_display_name');
   window.location.href = '/login';
 }
 
@@ -145,6 +178,19 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
   countToday(vocabSnap);
   countToday(kanjiSnap);
   countToday(grammarSnap);
+
+  const weeklyActivity: { date: string; count: number }[] = [];
+  const today = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split('T')[0];
+    let count = 0;
+    logsSnap.forEach(log => {
+      if (log.data().last_reviewed === dateStr) count++;
+    });
+    weeklyActivity.push({ date: dateStr, count });
+  }
   
   // Sort & limit recent
   recentItems.sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -183,7 +229,7 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
     due_today: dueToday,
     reviewed_today: reviewedToday,
     added_today: addedToday,
-    weekly_activity: [],
+    weekly_activity: weeklyActivity,
     recently_added: recentlyAdded,
     progress: {
       mastered_vocab: masteredVocab,
@@ -191,15 +237,15 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
       mastered_grammar: masteredGrammar,
     },
     achievements: {
-      early_bird: false,
-      night_owl: false,
+      early_bird: now.getHours() < 7,
+      night_owl: now.getHours() >= 22 || now.getHours() < 3,
       vocab_master: masteredVocab >= 100,
       kanji_master: masteredKanji >= 50,
       grammar_master: masteredGrammar >= 50,
       streak_7: newStreak >= 7,
       streak_30: newStreak >= 30,
-      ai_enthusiast: aiBreakdownsToday >= 5,
-      n1_hero: false
+      ai_enthusiast: (parseInt(localStorage.getItem(`ai_count_${todayStr}`) || '0')) >= 5,
+      n1_hero: masteredVocab >= 500 && masteredKanji >= 200 && masteredGrammar >= 100
     },
     ai_breakdowns_today: parseInt(localStorage.getItem(`ai_count_${todayStr}`) || '0')
   };
@@ -219,6 +265,7 @@ export async function fetchTodayReview(): Promise<ReviewItem[]> {
       const itemSnap = await getDoc(doc(userRef, logData.item_type, logData.item_id));
       if (itemSnap.exists()) {
         const itemData = itemSnap.data();
+        if (itemData.archived) continue;
         let front = '', back = '', reading = '', example = '', example_words = '', example_sentence = '';
         
         if (logData.item_type === 'vocabulary') {
@@ -277,6 +324,7 @@ export async function fetchRandomReview(): Promise<ReviewItem[]> {
     
     if (itemSnap.exists()) {
       const itemData = itemSnap.data();
+      if (itemData.archived) continue;
       let front = '', back = '', reading = '', example = '', example_words = '', example_sentence = '';
       
       if (logData.item_type === 'vocabulary') {
@@ -328,27 +376,34 @@ export async function submitRating(logId: string, quality: number): Promise<void
   const logSnap = await getDoc(logRef);
   if (!logSnap.exists()) return;
   
-  let { ease_factor, interval_days, repetitions } = logSnap.data();
-  let new_ease, new_interval, new_reps;
+  const data = logSnap.data() ?? {};
+  const easeFactor = Number(data.ease_factor ?? 2.5);
+  const intervalDays = Number(data.interval_days ?? 0);
+  const repetitions = Number(data.repetitions ?? 0);
+
+  let newEase: number, newInterval: number, newReps: number;
 
   if (quality < 3) {
-    new_ease = 2.5; new_interval = 1; new_reps = 0;
+    newEase = 2.5;
+    newInterval = 1;
+    newReps = 0;
   } else {
-    if (repetitions === 0) new_interval = 1;
-    else if (repetitions === 1) new_interval = 3;
-    else new_interval = Math.round(interval_days * ease_factor);
-    new_ease = ease_factor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-    if (new_ease < 1.3) new_ease = 1.3;
-    new_reps = repetitions + 1;
+    if (repetitions === 0) newInterval = 1;
+    else if (repetitions === 1) newInterval = 3;
+    else newInterval = Math.max(1, Math.round(intervalDays * easeFactor));
+
+    newEase = easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+    newEase = Math.max(newEase, 1.3);
+    newReps = repetitions + 1;
   }
 
   const nextDate = new Date();
-  nextDate.setDate(nextDate.getDate() + new_interval);
+  nextDate.setDate(nextDate.getDate() + newInterval);
   
   await updateDoc(logRef, {
-    ease_factor: new_ease,
-    interval_days: new_interval,
-    repetitions: new_reps,
+    ease_factor: newEase,
+    interval_days: newInterval,
+    repetitions: newReps,
     next_review: nextDate.toISOString().split('T')[0],
     last_reviewed: new Date().toISOString().split('T')[0],
     response_quality: quality
@@ -356,10 +411,12 @@ export async function submitRating(logId: string, quality: number): Promise<void
 }
 
 // -- Generic CRUD --
-async function fetchPaginated<T>(colName: string, page: number, search: string, jlpt: string): Promise<PaginatedResponse<T>> {
+async function fetchPaginated<T>(colName: string, page: number, search: string, jlpt: string, archived = false): Promise<PaginatedResponse<T>> {
   const userRef = getUserRef();
   const snap = await getDocs(collection(userRef, colName));
   let items = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+  items = items.filter(i => Boolean(i.archived) === archived);
   
   if (jlpt) items = items.filter(i => i.jlpt_level === jlpt);
   if (search) {
@@ -384,6 +441,19 @@ async function fetchPaginated<T>(colName: string, page: number, search: string, 
     per_page: limit,
     total_pages: Math.ceil(total / limit)
   };
+}
+
+// 🔥 Fetch ALL items tanpa pagination (buat export)
+async function fetchAll(colName: string, archived?: boolean): Promise<any[]> {
+  const userRef = getUserRef();
+  const snap = await getDocs(collection(userRef, colName));
+  let items = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+  if (archived !== undefined) {
+    items = items.filter(i => Boolean(i.archived) === archived);
+  }
+
+  return items;
 }
 
 async function createItem(colName: string, data: any) {
@@ -417,23 +487,37 @@ async function deleteItem(colName: string, id: string) {
   }
 }
 
+async function setItemArchived(colName: string, id: string, archived: boolean): Promise<void> {
+  const ref = doc(getUserRef(), colName, id);
+  await updateDoc(ref, { archived, updated_at: new Date().toISOString() });
+}
+
 // -- Vocabulary --
-export const fetchVocabulary = (p=1, s='', j='') => fetchPaginated<Vocabulary>('vocabulary', p, s, j);
+export const fetchVocabulary = (p=1, s='', j='', archived=false) => fetchPaginated<Vocabulary>('vocabulary', p, s, j, archived);
+export const fetchAllVocabulary = (archived?: boolean) => fetchAll('vocabulary', archived);
 export const createVocabulary = (d: any) => createItem('vocabulary', d);
 export const updateVocabulary = (id: any, d: any) => updateItem('vocabulary', id, d);
 export const deleteVocabulary = (id: any) => deleteItem('vocabulary', id);
+export const archiveVocabulary = (id: string) => setItemArchived('vocabulary', id, true);
+export const unarchiveVocabulary = (id: string) => setItemArchived('vocabulary', id, false);
 
 // -- Kanji --
-export const fetchKanji = (p=1, s='', j='') => fetchPaginated<Kanji>('kanji', p, s, j);
+export const fetchKanji = (p=1, s='', j='', archived=false) => fetchPaginated<Kanji>('kanji', p, s, j, archived);
+export const fetchAllKanji = (archived?: boolean) => fetchAll('kanji', archived);
 export const createKanji = (d: any) => createItem('kanji', d);
 export const updateKanji = (id: any, d: any) => updateItem('kanji', id, d);
 export const deleteKanji = (id: any) => deleteItem('kanji', id);
+export const archiveKanji = (id: string) => setItemArchived('kanji', id, true);
+export const unarchiveKanji = (id: string) => setItemArchived('kanji', id, false);
 
 // -- Grammar --
-export const fetchGrammar = (p=1, s='', j='') => fetchPaginated<Grammar>('grammar', p, s, j);
+export const fetchGrammar = (p=1, s='', j='', archived=false) => fetchPaginated<Grammar>('grammar', p, s, j, archived);
+export const fetchAllGrammar = (archived?: boolean) => fetchAll('grammar', archived);
 export const createGrammar = (d: any) => createItem('grammar', d);
 export const updateGrammar = (id: any, d: any) => updateItem('grammar', id, d);
 export const deleteGrammar = (id: any) => deleteItem('grammar', id);
+export const archiveGrammar = (id: string) => setItemArchived('grammar', id, true);
+export const unarchiveGrammar = (id: string) => setItemArchived('grammar', id, false);
 
 // -- Quiz --
 export async function fetchQuizItems(): Promise<any[]> {
@@ -446,15 +530,19 @@ export async function fetchQuizItems(): Promise<any[]> {
 
   let items: any[] = [];
   
-  vocabSnap.forEach(d => {
-    items.push({ ...d.data(), id: d.id, type: 'vocabulary', quiz_count: d.data().quiz_count || 0 });
-  });
-  kanjiSnap.forEach(d => {
-    items.push({ ...d.data(), id: d.id, type: 'kanji', quiz_count: d.data().quiz_count || 0 });
-  });
-  grammarSnap.forEach(d => {
-    items.push({ ...d.data(), id: d.id, type: 'grammar', quiz_count: d.data().quiz_count || 0 });
-  });
+  const addQuizItems = (snap: any, type: string) => {
+    snap.forEach((d: any) => {
+      const data = d.data();
+      const target = data.word || data.character || data.pattern;
+      if (!data.archived && typeof target === 'string' && target.trim()) {
+        items.push({ ...data, id: d.id, type, quiz_count: data.quiz_count || 0 });
+      }
+    });
+  };
+
+  addQuizItems(vocabSnap, 'vocabulary');
+  addQuizItems(kanjiSnap, 'kanji');
+  addQuizItems(grammarSnap, 'grammar');
 
   // Sort: quiz_count rendah dulu (item baru), lalu created_at terbaru
   items.sort((a, b) => {

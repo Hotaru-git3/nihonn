@@ -7,6 +7,7 @@ export interface Vocabulary {
   jlpt_level?: string;
   example_sentence?: string;
   created_at?: string;
+  archived?: boolean;
 }
 
 export interface Kanji {
@@ -20,6 +21,7 @@ export interface Kanji {
   mnemonic?: string;
   example_words?: string;
   example_sentence?: string;
+  archived?: boolean;
 }
 
 export interface Grammar {
@@ -29,6 +31,7 @@ export interface Grammar {
   structure?: string;
   example_sentence?: string;
   jlpt_level?: string;
+  archived?: boolean;
 }
 
 export interface ReviewItem {

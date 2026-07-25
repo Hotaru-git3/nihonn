@@ -33,7 +33,7 @@ export function updateActiveBottomNav(hash: string) {
     const icon = el.querySelector('.material-symbols-outlined') as HTMLElement;
     if (icon) icon.style.fontVariationSettings = "'FILL' 0";
     
-    if (el.getAttribute('data-path') === hash) {
+    if (el.getAttribute('data-path') === hash || (hash === '/library/archive' && el.getAttribute('data-path') === '/library')) {
       el.className = "mobile-nav-item flex flex-col items-center justify-center bg-rupiahku-brown text-white rounded-xl px-3 py-1 hover:bg-surface-container-highest transition-transform scale-90 active:scale-90 duration-200 min-w-[56px]";
       if (icon) icon.style.fontVariationSettings = "'FILL' 1";
     }

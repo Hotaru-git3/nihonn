@@ -287,9 +287,16 @@ function flip() {
 }
 
 async function handleRating(quality: number, container: HTMLElement) {
+  const card = cards[currentIndex];
+  
+  try {
+    await submitRating(card.log_id, quality);
+  } catch (err) {
+    console.error("Rating failed", err);
+  }
+  
   currentIndex++;
   isFlipped = false;
-  submitRating(cards[currentIndex - 1]?.log_id, quality).catch(err => console.error("Rating failed", err));
   
   const cardCont = document.getElementById('flashcard-container');
   if (cardCont) {

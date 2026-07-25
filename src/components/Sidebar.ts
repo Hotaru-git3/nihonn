@@ -79,7 +79,7 @@ export function updateActiveSidebarNav(hash: string) {
   document.querySelectorAll('.nav-item').forEach(el => {
     el.className = "nav-item flex items-center space-x-3 px-4 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-container-high transition-all duration-200 font-medium text-[15px]";
     
-    if (el.getAttribute('data-path') === hash) {
+    if (el.getAttribute('data-path') === hash || (hash === '/library/archive' && el.getAttribute('data-path') === '/library')) {
       el.className = "nav-item flex items-center space-x-3 px-4 py-2.5 rounded-xl bg-rupiahku-brown text-white font-medium text-[15px] shadow-md transition-all duration-200";
     }
   });

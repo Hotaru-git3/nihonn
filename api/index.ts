@@ -30,8 +30,26 @@ SANGAT PENTING (ATURAN KETAT):
 **PERHATIAN KHUSUS UNTUK PEMECAHAN KATA (TOKENISASI):**
 - JANGAN PERNAH memecah kata kerja (verbs) atau kata sifat (adjectives) menjadi suku kata/partikel terpisah.
 - Contoh: "入れます" adalah SATU KATA UTUH (bentuk masu dari kata kerja "入れる"). JANGAN memecahnya menjadi "入" + "れ" + "ます".
-- Contoh: "食べます" adalah SATU KATA UTUH (tabemasu). JANGAN memecahnya menjadi "食" + "べ" + "ます".
+- Contoh: "待って" adalah SATU KATA UTUH (bentuk te dari kata kerja "待つ"). JANGAN memecahnya menjadi "待" + "って".
 - Jika sebuah kata kerja berubah bentuk, kembalikan ke bentuk kamusnya (dictionary form) untuk field "word", tapi tuliskan bentuk aslinya di "reading".
+
+**ATURAN ANGKA DAN HITUNGAN:**
+- JANGAN memisahkan angka (seperti 2, 3, 10) dari kata hitungannya. Contoh: "2人" adalah SATU KOSAKATA (futari / dua orang). JANGAN memecahnya menjadi "2" + "人".
+- Kata benda yang mengandung angka (seperti 二人, 三人, 一人) harus dianggap SATU KOSAKATA UTUH.
+
+**ATURAN ROMAJI (CARA BACA):**
+- Hati-hati dengan bacaan khusus (Jukujikun). Misalnya, "大人" dibaca "otona", BUKAN "odaikata". "時" dibaca "toki", BUKAN "ji".
+- Gunakan sistem romaji standar (Hepburn). Pastikan tulisan romaji tidak mengandung typo atau karakter aneh.
+
+**ATURAN STRUKTUR TERJEMAHAN UTUH (SANGAT PENTING):**
+- Analisis dulu struktur kalimatnya. JANGAN sampai "keterangan waktu" (seperti 〜になって, 〜の時) diterjemahkan sebagai "subjek kalimat".
+- Tentukan mana Subjek, Predikat, Objek, dan Keterangan. Terjemahkan ke dalam Bahasa Indonesia yang wajar dan mengalir.
+- Contoh JANGAN SALAH: "大人になって思い出すのは" JANGAN diterjemahkan menjadi "Yang membuatku mengingat adalah orang dewasa". 
+- Contoh BENAR: "Hal yang aku ingat setelah menjadi dewasa adalah..." (karena 大人になって adalah keterangan waktu, bukan subjek).
+
+**ATURAN PENGISIAN PART OF SPEECH & LEVEL:**
+- Saat mengisi "part_of_speech", gunakan istilah baku bahasa Indonesia: "kata benda", "kata kerja", "kata sifat", "kata keterangan", "partikel", atau "konjungsi".
+- Saat mengisi "jlpt_level", isi dengan "N5", "N4", "N3", "N2", "N1", atau "N/A" jika tidak yakin. Jangan mengarang level selain itu.
 
 1. Semua kosakata (kecuali partikel dan kata level N5 paling dasar). Field "meaning" wajib dalam Bahasa Indonesia.
 2. Semua kanji yang muncul. Untuk kanji sertakan contoh kalimat singkat yang menggunakannya, dan juga contoh gabungan kata (elemen pendukung) yang menggunakan kanji tersebut beserta artinya (misal: "銀行 (ginkou) - bank"). Field "meaning" wajib dalam Bahasa Indonesia.
@@ -64,26 +82,9 @@ class AIService {
 
   constructor() {
     this.models = [
-      // Model 1: Paling ringan dan cepat (Digunakan pertama kali agar Vercel tidak timeout)
       {
         name: 'meta/llama-3.1-8b-instruct',
         apiKey: process.env.NVIDIA_API_KEY || '',
-        temperature: 0.2,
-        top_p: 0.7,
-        max_tokens: 1024,
-      },
-      // Model 2: Mistral (Lebih pintar dari 8B, dan cukup cepat)
-      {
-        name: 'mistral-medium-3.5-128b',
-        apiKey: process.env.NVIDIA_API_KEY_MISTRAL || '',
-        temperature: 0.2,
-        top_p: 0.7,
-        max_tokens: 1024,
-      },
-      // Model 3 & 4: Llama 70B (Paling berat, tapi paling akurat. Dijadikan fallback terakhir)
-      {
-        name: 'meta/llama-3.3-70b-instruct',
-        apiKey: process.env.NVIDIA_API_KEY_LLAMA || '',
         temperature: 0.2,
         top_p: 0.7,
         max_tokens: 1024,
@@ -95,6 +96,23 @@ class AIService {
         top_p: 0.7,
         max_tokens: 1024,
       },
+      {
+        name: 'meta/llama-3.3-70b-instruct',
+        apiKey: process.env.NVIDIA_API_KEY_LLAMA || '',
+        temperature: 0.2,
+        top_p: 0.7,
+        max_tokens: 1024,
+      },
+      {
+        name: 'deepseek-ai/deepseek-v4-flash',
+        apiKey: process.env.NVIDIA_API_KEY_DEEPSEEK || '',
+        temperature: 0.2,
+        top_p: 0.7,
+        max_tokens: 1024,
+      },
+      // Model 1: Paling ringan dan cepat (Digunakan pertama kali agar Vercel tidak timeout)
+      // Model 3 & 4: Llama 70B (Paling berat, tapi paling akurat. Dijadikan fallback terakhir)
+      // Model 2: Mistral (Lebih pintar dari 8B, dan cukup cepat)
     ].filter((m): m is ModelConfig => !!m.apiKey);
   }
 

@@ -8,6 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { aiService } from './services/ai.service';
+import OpenAI from 'openai';
 
 dotenv.config();
 
@@ -185,15 +186,69 @@ app.post('/api/quiz/generate', async (req, res) => {
       return res.status(400).json({ error: 'Items required' });
     }
 
-    // Forward ke Vercel production (atau handle langsung)
-    const response = await fetch('https://nihon.iamdane.me/api/quiz/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items })
+    const apiKey = process.env.NVIDIA_API_KEY || process.env.NVIDIA_API_KEY_LLAMA || '';
+    if (!apiKey) {
+      return res.status(500).json({ error: 'NVIDIA API key belum dikonfigurasi.' });
+    }
+
+    const prompt = `Kamu adalah konverter teks Jepang ke romaji.
+Untuk setiap item, ubah target menjadi romaji Latin lengkap.
+Jangan membuat kalimat baru dan jangan menggabungkan item.
+Field romaji hanya boleh berisi huruf Latin, angka, spasi, tanda hubung, apostrof, dan tanda baca biasa.
+
+Items:
+${items.map((item: any, index: number) => `${index + 1}. itemId=${item.id}; target=${item.target}`).join('\n')}
+
+Balas HANYA JSON array dengan jumlah dan urutan yang sama:
+[
+  { "itemId": "id item", "romaji": "romaji lengkap" }
+]
+
+Contoh: "駅で降ります" menjadi { "itemId": "id item", "romaji": "eki de orimasu" }.`;
+
+    const openai = new OpenAI({
+      baseURL: 'https://integrate.api.nvidia.com/v1',
+      apiKey,
     });
-    
-    const data = await response.json();
-    res.json(data);
+
+    const response = await openai.chat.completions.create({
+      model: 'meta/llama-3.1-8b-instruct',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1,
+      max_tokens: 2048,
+    });
+
+    let resultText = response.choices[0]?.message?.content?.trim() || '';
+    resultText = resultText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '').trim();
+    const firstBracket = resultText.indexOf('[');
+    const lastBracket = resultText.lastIndexOf(']');
+    if (firstBracket === -1 || lastBracket === -1) {
+      throw new Error('Respons AI bukan JSON array');
+    }
+
+    const parsed = JSON.parse(resultText.slice(firstBracket, lastBracket + 1));
+    if (!Array.isArray(parsed) || parsed.length !== items.length) {
+      throw new Error('Jumlah soal tidak sesuai');
+    }
+
+    const sentences = parsed.map((question: any, index: number) => {
+      const item = items[index];
+      if (
+        question?.itemId !== item.id ||
+        typeof question.romaji !== 'string' ||
+        !question.romaji.trim() ||
+        /[ぁ-んァ-ン一-龯々]/u.test(question.romaji)
+      ) {
+        throw new Error(`Format soal tidak valid pada item ${index + 1}`);
+      }
+      return {
+        itemId: item.id,
+        sentence: item.target.trim(),
+        romaji: question.romaji.trim(),
+      };
+    });
+
+    res.json({ sentences });
     
   } catch (err: any) {
     console.error('Quiz generate error:', err.message);

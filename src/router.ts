@@ -140,6 +140,9 @@ export function router(): void {
     case '/library':
       renderLibrary(mainContent);
       break;
+    case '/library/archive':
+      renderLibrary(mainContent, true);
+      break;
     case '/ai':
       renderAIBreakdown(mainContent);
       break;

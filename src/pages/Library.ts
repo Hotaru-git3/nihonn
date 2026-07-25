@@ -1,4 +1,4 @@
-import { fetchVocabulary, fetchKanji, fetchGrammar, createVocabulary, createKanji, createGrammar, deleteVocabulary, deleteKanji, deleteGrammar } from '../services/api';
+import { fetchVocabulary, fetchKanji, fetchGrammar, createVocabulary, createKanji, createGrammar, deleteVocabulary, deleteKanji, deleteGrammar, archiveVocabulary, archiveKanji, archiveGrammar, unarchiveVocabulary, unarchiveKanji, unarchiveGrammar } from '../services/api';
 import { showToast } from '../components/Toast';
 import { openModal, closeModal } from '../components/Modal';
 
@@ -8,10 +8,17 @@ let currentSearch = '';
 let currentJlpt = '';
 let searchTimeout: any;
 
-export async function renderLibrary(container: HTMLElement) {
+export async function renderLibrary(container: HTMLElement, archived = false) {
   container.innerHTML = `
     <header class="mb-stack_lg">
-      <h1 class="text-3xl font-display font-bold text-on-surface mb-4">Library</h1>
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <h1 class="text-3xl font-display font-bold text-on-surface">${archived ? 'Arsip' : 'Library'}</h1>
+        <a href="${archived ? '/library' : '/library/archive'}" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-outline-variant text-on-surface-variant hover:text-primary hover:border-primary transition-colors">
+          <span class="material-symbols-outlined text-[20px]">${archived ? 'library_books' : 'archive'}</span>
+          ${archived ? 'Kembali ke Library' : 'Lihat Arsip'}
+        </a>
+      </div>
+      ${archived ? '<p class="text-on-surface-variant font-body-md mb-4">Item di sini tidak akan muncul dalam sesi review.</p>' : ''}
       <div class="flex border-b border-outline-variant gap-6 overflow-x-auto" id="lib-tabs">
         ${['Semua', 'Kosakata', 'Kanji', 'Tata Bahasa'].map(tab => `
           <button class="lib-tab pb-3 px-2 font-body-md ${tab === currentTab ? 'font-semibold text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-primary transition-colors'}" data-tab="${tab}">${tab}</button>
@@ -33,7 +40,7 @@ export async function renderLibrary(container: HTMLElement) {
           <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">arrow_drop_down</span>
         </div>
       </div>
-      <button id="btn-add" class="w-full md:w-auto bg-primary text-on-primary px-6 py-2 rounded-lg font-body-md font-semibold hover:bg-primary/90 transition-colors shadow-sm flex items-center justify-center gap-2">
+      <button id="btn-add" class="${archived ? 'hidden' : ''} w-full md:w-auto bg-primary text-on-primary px-6 py-2 rounded-lg font-body-md font-semibold hover:bg-primary/90 transition-colors shadow-sm flex items-center justify-center gap-2">
         <span class="material-symbols-outlined text-[20px]">add</span>
         Tambah Manual
       </button>
@@ -79,7 +86,7 @@ export async function renderLibrary(container: HTMLElement) {
   `;
 
   attachEvents(container);
-  await loadData();
+  await loadData(archived);
 }
 
 function attachEvents(container: HTMLElement) {
@@ -87,7 +94,7 @@ function attachEvents(container: HTMLElement) {
     tab.addEventListener('click', (e) => {
       currentTab = (e.target as HTMLElement).getAttribute('data-tab') || 'Semua';
       currentPage = 1;
-      renderLibrary(container);
+      renderLibrary(container, window.location.pathname === '/library/archive');
     });
   });
 
@@ -112,7 +119,7 @@ function attachEvents(container: HTMLElement) {
   });
 }
 
-async function loadData() {
+async function loadData(archived = window.location.pathname === '/library/archive') {
   const tableCont = document.getElementById('table-container');
   if (!tableCont) return;
 
@@ -160,17 +167,17 @@ async function loadData() {
     let total = 0;
     
     if (currentTab === 'Kosakata' || currentTab === 'Semua') {
-      const res = await fetchVocabulary(currentPage, currentSearch, currentJlpt);
+      const res = await fetchVocabulary(currentPage, currentSearch, currentJlpt, archived);
       items = items.concat(res.data.map((d: any) => ({...d, type: 'vocabulary'})));
       total += res.total;
     }
     if (currentTab === 'Kanji' || currentTab === 'Semua') {
-      const res = await fetchKanji(currentPage, currentSearch, currentJlpt);
+      const res = await fetchKanji(currentPage, currentSearch, currentJlpt, archived);
       items = items.concat(res.data.map((d: any) => ({...d, type: 'kanji'})));
       total += res.total;
     }
     if (currentTab === 'Tata Bahasa' || currentTab === 'Semua') {
-      const res = await fetchGrammar(currentPage, currentSearch, currentJlpt);
+      const res = await fetchGrammar(currentPage, currentSearch, currentJlpt, archived);
       items = items.concat(res.data.map((d: any) => ({...d, type: 'grammar'})));
       total += res.total;
     }
@@ -181,13 +188,13 @@ async function loadData() {
       items = items.slice(0, 10); // simple limit for mixed
     }
 
-    renderTable(items, total);
+    renderTable(items, total, archived);
   } catch (err) {
     tableCont.innerHTML = `<div class="p-4 text-error">Failed to load data</div>`;
   }
 }
 
-function renderTable(items: any[], total: number) {
+function renderTable(items: any[], total: number, archived = window.location.pathname === '/library/archive') {
   const tableCont = document.getElementById('table-container');
   if (!tableCont) return;
 
@@ -217,7 +224,10 @@ function renderTable(items: any[], total: number) {
         <td class="p-4 text-on-surface-variant text-sm">${new Date(item.created_at).toLocaleDateString('id-ID')}</td>
         <td class="p-4 text-center">
           <div class="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button class="p-1 text-on-surface-variant hover:text-error transition-colors" onclick="window.deleteItem('${item.type}', '${item.id}')">
+            <button class="p-1 text-on-surface-variant hover:text-primary transition-colors" title="${archived ? 'Keluarkan dari arsip' : 'Arsipkan item'}" onclick="window.toggleArchiveItem('${item.type}', '${item.id}', ${archived})">
+              <span class="material-symbols-outlined text-[20px]">${archived ? 'unarchive' : 'archive'}</span>
+            </button>
+            <button class="p-1 text-on-surface-variant hover:text-error transition-colors" title="Hapus item" onclick="window.deleteItem('${item.type}', '${item.id}')">
               <span class="material-symbols-outlined text-[20px]">delete</span>
             </button>
           </div>
@@ -315,6 +325,18 @@ function openAddModal() {
     loadData();
   } catch (err) {
     showToast('Gagal menghapus', 'error');
+  }
+};
+
+(window as any).toggleArchiveItem = async (type: string, id: string, currentlyArchived: boolean) => {
+  try {
+    if (type === 'vocabulary') currentlyArchived ? await unarchiveVocabulary(id) : await archiveVocabulary(id);
+    if (type === 'kanji') currentlyArchived ? await unarchiveKanji(id) : await archiveKanji(id);
+    if (type === 'grammar') currentlyArchived ? await unarchiveGrammar(id) : await archiveGrammar(id);
+    showToast(currentlyArchived ? 'Item dikembalikan ke Library' : 'Item berhasil diarsipkan', 'success');
+    loadData(currentlyArchived);
+  } catch (err) {
+    showToast('Gagal mengubah arsip item', 'error');
   }
 };
 
