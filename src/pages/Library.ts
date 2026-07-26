@@ -1,4 +1,4 @@
-import { fetchVocabulary, fetchKanji, fetchGrammar, createVocabulary, createKanji, createGrammar, deleteVocabulary, deleteKanji, deleteGrammar, archiveVocabulary, archiveKanji, archiveGrammar, unarchiveVocabulary, unarchiveKanji, unarchiveGrammar } from '../services/api';
+import { fetchVocabulary, fetchKanji, fetchGrammar, fetchAllVocabulary, fetchAllKanji, fetchAllGrammar, createVocabulary, createKanji, createGrammar, deleteVocabulary, deleteKanji, deleteGrammar, archiveVocabulary, archiveKanji, archiveGrammar, unarchiveVocabulary, unarchiveKanji, unarchiveGrammar } from '../services/api';
 import { showToast } from '../components/Toast';
 import { openModal, closeModal } from '../components/Modal';
 
@@ -19,10 +19,13 @@ export async function renderLibrary(container: HTMLElement, archived = false) {
         </a>
       </div>
       ${archived ? '<p class="text-on-surface-variant font-body-md mb-4">Item di sini tidak akan muncul dalam sesi review.</p>' : ''}
-      <div class="flex border-b border-outline-variant gap-6 overflow-x-auto" id="lib-tabs">
-        ${['Semua', 'Kosakata', 'Kanji', 'Tata Bahasa'].map(tab => `
-          <button class="lib-tab pb-3 px-2 font-body-md ${tab === currentTab ? 'font-semibold text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-primary transition-colors'}" data-tab="${tab}">${tab}</button>
-        `).join('')}
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex border-b border-outline-variant gap-6 overflow-x-auto" id="lib-tabs">
+          ${['Semua', 'Kosakata', 'Kanji', 'Tata Bahasa'].map(tab => `
+            <button class="lib-tab pb-3 px-2 font-body-md ${tab === currentTab ? 'font-semibold text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-primary transition-colors'}" data-tab="${tab}">${tab}</button>
+          `).join('')}
+        </div>
+        ${archived ? '' : `<button id="toggle-archive-all-grammar" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-outline-variant text-on-surface-variant hover:text-primary hover:border-primary transition-colors">Arsipkan semua</button>`}
       </div>
     </header>
 
@@ -117,6 +120,10 @@ function attachEvents(container: HTMLElement) {
   document.getElementById('btn-add')?.addEventListener('click', () => {
     openAddModal();
   });
+
+  document.getElementById('toggle-archive-all-grammar')?.addEventListener('click', () => {
+    (window as any).toggleArchiveAll();
+  });
 }
 
 async function loadData(archived = window.location.pathname === '/library/archive') {
@@ -189,8 +196,39 @@ async function loadData(archived = window.location.pathname === '/library/archiv
     }
 
     renderTable(items, total, archived);
+    await updateArchiveAllButton(archived);
   } catch (err) {
     tableCont.innerHTML = `<div class="p-4 text-error">Failed to load data</div>`;
+  }
+}
+
+async function updateArchiveAllButton(archived = window.location.pathname === '/library/archive') {
+  const button = document.getElementById('toggle-archive-all-grammar') as HTMLButtonElement | null;
+  if (!button) return;
+  if (archived) {
+    button.classList.add('hidden');
+    return;
+  }
+
+  try {
+    const [unarchivedVocabulary, archivedVocabulary] = await Promise.all([fetchAllVocabulary(false), fetchAllVocabulary(true)]);
+    const [unarchivedKanji, archivedKanji] = await Promise.all([fetchAllKanji(false), fetchAllKanji(true)]);
+    const [unarchivedGrammar, archivedGrammar] = await Promise.all([fetchAllGrammar(false), fetchAllGrammar(true)]);
+
+    const totalItems = unarchivedVocabulary.length + archivedVocabulary.length + unarchivedKanji.length + archivedKanji.length + unarchivedGrammar.length + archivedGrammar.length;
+    const allArchived = totalItems > 0 && unarchivedVocabulary.length === 0 && unarchivedKanji.length === 0 && unarchivedGrammar.length === 0;
+
+    if (!totalItems) {
+      button.classList.add('hidden');
+      return;
+    }
+
+    button.classList.remove('hidden');
+    button.textContent = allArchived ? 'Unarsip semua' : 'Arsipkan semua';
+    button.title = allArchived ? 'Keluarkan semua item dari arsip' : 'Arsipkan semua item';
+    button.dataset.action = allArchived ? 'unarchive' : 'archive';
+  } catch (err) {
+    button.classList.add('hidden');
   }
 }
 
@@ -337,6 +375,61 @@ function openAddModal() {
     loadData(currentlyArchived);
   } catch (err) {
     showToast('Gagal mengubah arsip item', 'error');
+  }
+};
+
+(window as any).toggleArchiveAll = async () => {
+  try {
+    const [unarchivedVocabulary, archivedVocabulary] = await Promise.all([fetchAllVocabulary(false), fetchAllVocabulary(true)]);
+    const [unarchivedKanji, archivedKanji] = await Promise.all([fetchAllKanji(false), fetchAllKanji(true)]);
+    const [unarchivedGrammar, archivedGrammar] = await Promise.all([fetchAllGrammar(false), fetchAllGrammar(true)]);
+    const allArchived = unarchivedVocabulary.length === 0 && unarchivedKanji.length === 0 && unarchivedGrammar.length === 0 && (archivedVocabulary.length + archivedKanji.length + archivedGrammar.length > 0);
+    const actionLabel = allArchived ? 'Unarsip Semua Item' : 'Arsipkan Semua Item';
+    const actionText = allArchived
+      ? 'Semua item akan dikembalikan ke Library.'
+      : 'Semua item akan dipindahkan ke arsip.';
+    const confirmId = allArchived ? 'confirm-unarchive-all-items-btn' : 'confirm-archive-all-items-btn';
+
+    openModal(actionLabel, `
+      <div class="text-on-surface-variant mb-4">${actionText}</div>
+      <div class="flex justify-end gap-3 pt-4">
+        <button class="px-4 py-2 rounded-lg border border-outline-variant text-on-surface hover:bg-surface-container-highest" onclick="closeModal()">Batal</button>
+        <button id="${confirmId}" class="px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90">${allArchived ? 'Unarsip Semua' : 'Arsipkan Semua'}</button>
+      </div>
+    `);
+
+    document.getElementById(confirmId)?.addEventListener('click', async () => {
+      closeModal();
+      try {
+        if (allArchived) {
+          for (const item of archivedVocabulary) {
+            await unarchiveVocabulary(item.id);
+          }
+          for (const item of archivedKanji) {
+            await unarchiveKanji(item.id);
+          }
+          for (const item of archivedGrammar) {
+            await unarchiveGrammar(item.id);
+          }
+        } else {
+          for (const item of unarchivedVocabulary) {
+            await archiveVocabulary(item.id);
+          }
+          for (const item of unarchivedKanji) {
+            await archiveKanji(item.id);
+          }
+          for (const item of unarchivedGrammar) {
+            await archiveGrammar(item.id);
+          }
+        }
+        showToast(allArchived ? 'Semua item dikembalikan ke Library' : 'Semua item berhasil diarsipkan', 'success');
+        loadData(false);
+      } catch (err) {
+        showToast('Gagal mengubah arsip semua item', 'error');
+      }
+    });
+  } catch (err) {
+    showToast('Gagal memuat status arsip semua item', 'error');
   }
 };
 

@@ -132,22 +132,23 @@ function renderCurrentCard(container: HTMLElement) {
             </div>
           </div>
           
-          <div class="flashcard-back backface-hidden rotate-y-180 flex flex-col items-center justify-center p-6 sm:p-8 bg-white rounded-flashcard h-full w-full absolute top-0 left-0 border border-outline-variant/30 overflow-y-auto">
-            <div class="w-full flex flex-col h-full items-center justify-center space-y-4">
-              <div class="text-center w-full flex flex-col items-center justify-center mb-4">
-                ${card.reading ? `<span class="block font-japanese-text text-base sm:text-lg text-on-surface-variant tracking-wider opacity-80 break-words w-full text-balance mb-2">${card.reading}</span>` : ''}
-                <h3 class="font-headline-lg text-xl sm:text-[28px] text-on-surface font-bold leading-tight break-words text-balance mb-3">${card.back}</h3>
-                <div class="inline-block px-3 py-1 rounded-md bg-surface-container-low border border-outline-variant/30 font-label-sm text-xs sm:text-sm text-on-surface-variant">
-                    ${itemInfo}
-                </div>
-              </div>
+          <div class="flashcard-back backface-hidden rotate-y-180 flex flex-col items-center justify-start p-4 sm:p-6 bg-white rounded-flashcard h-full w-full absolute top-0 left-0 border border-outline-variant/30 overflow-y-auto" style="max-height: 60vh; -webkit-overflow-scrolling: touch;">
+  <div class="w-full flex flex-col items-center space-y-3 py-2">
+    
+    <div class="text-center w-full flex flex-col items-center justify-center">
+      ${card.reading ? `<span class="block font-japanese-text text-sm sm:text-base text-on-surface-variant tracking-wider opacity-80 break-words w-full text-balance mb-2">${card.reading}</span>` : ''}
+      <h3 class="font-headline-lg text-lg sm:text-[24px] text-on-surface font-bold leading-tight break-words text-balance mb-2">${card.back}</h3>
+      <div class="inline-block px-3 py-1 rounded-md bg-surface-container-low border border-outline-variant/30 font-label-sm text-xs text-on-surface-variant">
+          ${itemInfo}
+      </div>
+    </div>
               
               ${(card.example_sentence || card.example || card.example_words) ? `
-              <div class="w-full mt-auto pt-4 border-t border-outline-variant/30 text-center space-y-3">
-                ${card.example_sentence ? `<div class="w-full"><p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Contoh Kalimat</p><p class="font-japanese-text text-sm sm:text-md text-on-surface leading-snug">${card.example_sentence}</p></div>` : ''}
-                ${card.example ? `<div class="w-full"><p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">${card.item_type === 'kanji' ? 'Mnemonic / Info' : 'Contoh Tambahan'}</p><p class="font-japanese-text text-sm sm:text-md text-on-surface leading-snug">${card.example}</p></div>` : ''}
-                ${card.example_words ? `<div class="w-full bg-surface-container-low p-3 rounded-lg border border-outline-variant/20"><p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Kosakata Terkait</p><p class="font-japanese-text text-xs sm:text-sm text-on-surface-variant leading-snug break-words whitespace-pre-wrap">${card.example_words}</p></div>` : ''}
-              </div>` : ''}
+    <div class="w-full pt-3 border-t border-outline-variant/30 text-center space-y-2">
+      ${card.example_sentence ? `<div class="w-full"><p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Contoh Kalimat</p><p class="font-japanese-text text-xs sm:text-sm text-on-surface leading-snug break-words">${card.example_sentence}</p></div>` : ''}
+      ${card.example ? `<div class="w-full"><p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">${card.item_type === 'kanji' ? 'Mnemonic / Info' : 'Contoh Tambahan'}</p><p class="font-japanese-text text-xs sm:text-sm text-on-surface leading-snug">${card.example}</p></div>` : ''}
+      ${card.example_words ? `<div class="w-full bg-surface-container-low p-2 rounded-lg border border-outline-variant/20"><p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Kosakata Terkait</p><p class="font-japanese-text text-xs text-on-surface-variant leading-snug break-words whitespace-pre-wrap">${card.example_words}</p></div>` : ''}
+    </div>` : ''}
             </div>
           </div>
         </div>
