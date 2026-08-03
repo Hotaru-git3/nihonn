@@ -6,8 +6,43 @@ let currentIndex = 0;
 let isFlipped = false;
 let reviewMode: 'random' | 'not-mastered' = 'random';
 
+function getSavedSession(): { cards: ReviewItem[]; currentIndex: number; mode: string } | null {
+  try {
+    const saved = sessionStorage.getItem('review_session');
+    if (!saved) return null;
+    const session = JSON.parse(saved);
+    if (!session.cards || session.currentIndex >= session.cards.length) {
+      sessionStorage.removeItem('review_session');
+      return null;
+    }
+    return session;
+  } catch {
+    sessionStorage.removeItem('review_session');
+    return null;
+  }
+}
+
+function saveSession() {
+  try {
+    sessionStorage.setItem('review_session', JSON.stringify({
+      cards,
+      currentIndex,
+      mode: reviewMode
+    }));
+  } catch {
+    // Session storage penuh, abaikan
+  }
+}
+
+function clearSession() {
+  sessionStorage.removeItem('review_session');
+}
+
 export async function renderReview(container: HTMLElement, mode?: 'random' | 'not-mastered') {
   if (!mode) {
+    const savedSession = getSavedSession();
+    const remainingCards = savedSession ? savedSession.cards.length - savedSession.currentIndex : 0;
+
     container.innerHTML = `
       <div class="flex flex-col items-center justify-center h-full space-y-8 animate-fade-in">
         <div class="text-center">
@@ -19,9 +54,17 @@ export async function renderReview(container: HTMLElement, mode?: 'random' | 'no
         <div class="flex flex-col gap-4 w-full max-w-sm">
           <button id="btn-random-review" class="w-full bg-primary text-on-primary py-6 rounded-2xl font-bold text-lg hover:bg-primary/90 transition-all shadow-lg hover:shadow-xl active:scale-[0.98] flex flex-col items-center gap-2">
             <span class="material-symbols-outlined text-3xl">shuffle</span>
-            <span>Review Acak</span>
-            <span class="text-sm font-normal opacity-80">Semua kartu di-acak</span>
+            <span>Mulai Review Acak Baru</span>
+            <span class="text-sm font-normal opacity-80">Semua kartu di-acak dari awal</span>
           </button>
+
+          ${savedSession ? `
+            <button id="btn-continue-review" class="w-full bg-surface-container-high text-on-surface py-6 rounded-2xl font-bold text-lg hover:bg-surface-container-highest transition-all shadow-lg hover:shadow-xl active:scale-[0.98] flex flex-col items-center gap-2">
+              <span class="material-symbols-outlined text-3xl">play_arrow</span>
+              <span>Lanjutkan Review</span>
+              <span class="text-sm font-normal opacity-80">${remainingCards} dari ${savedSession.cards.length} kartu tersisa</span>
+            </button>
+          ` : ''}
           
           <button id="btn-not-mastered-review" class="w-full bg-secondary-container text-on-secondary-container py-6 rounded-2xl font-bold text-lg hover:bg-secondary-container/80 transition-all shadow-lg hover:shadow-xl active:scale-[0.98] flex flex-col items-center gap-2">
             <span class="material-symbols-outlined text-3xl">school</span>
@@ -34,12 +77,28 @@ export async function renderReview(container: HTMLElement, mode?: 'random' | 'no
       </div>
     `;
 
-    document.getElementById('btn-random-review')?.addEventListener('click', () => renderReview(container, 'random'));
-    document.getElementById('btn-not-mastered-review')?.addEventListener('click', () => renderReview(container, 'not-mastered'));
+    document.getElementById('btn-random-review')?.addEventListener('click', () => {
+      clearSession();
+      renderReview(container, 'random');
+    });
+    document.getElementById('btn-continue-review')?.addEventListener('click', () => {
+      const session = getSavedSession();
+      if (!session) return;
+      cards = session.cards;
+      currentIndex = session.currentIndex;
+      reviewMode = 'random';
+      isFlipped = false;
+      renderCurrentCard(container);
+    });
+    document.getElementById('btn-not-mastered-review')?.addEventListener('click', () => {
+      clearSession();
+      renderReview(container, 'not-mastered');
+    });
     return;
   }
 
   reviewMode = mode;
+  clearSession();
 
   container.innerHTML = `
     <div class="flex items-center justify-center h-full">
@@ -85,6 +144,7 @@ export async function renderReview(container: HTMLElement, mode?: 'random' | 'no
 
 function renderCurrentCard(container: HTMLElement) {
   if (currentIndex >= cards.length) {
+    clearSession();
     container.innerHTML = `
       <div class="flex flex-col items-center justify-center h-full text-center space-y-4 fade-in-slide-up">
         <span class="text-6xl">🎊</span>
@@ -293,6 +353,7 @@ async function handleRating(quality: number, container: HTMLElement) {
   
   currentIndex++;
   isFlipped = false;
+  saveSession();
   
   const cardCont = document.getElementById('flashcard-container');
   if (cardCont) {
