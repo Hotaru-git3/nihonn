@@ -582,6 +582,30 @@ export const deleteGrammar = (id: any) => deleteItem('grammar', id);
 export const archiveGrammar = (id: string) => setItemArchived('grammar', id, true);
 export const unarchiveGrammar = (id: string) => setItemArchived('grammar', id, false);
 
+export async function bulkArchiveItems(items: { type: string; id: string }[]): Promise<void> {
+  for (const item of items) {
+    if (item.type === 'vocabulary') await archiveVocabulary(item.id);
+    else if (item.type === 'kanji') await archiveKanji(item.id);
+    else if (item.type === 'grammar') await archiveGrammar(item.id);
+  }
+}
+
+export async function bulkDeleteItems(items: { type: string; id: string }[]): Promise<void> {
+  for (const item of items) {
+    if (item.type === 'vocabulary') await deleteVocabulary(item.id);
+    else if (item.type === 'kanji') await deleteKanji(item.id);
+    else if (item.type === 'grammar') await deleteGrammar(item.id);
+  }
+}
+
+export async function bulkUnarchiveItems(items: { type: string; id: string }[]): Promise<void> {
+  for (const item of items) {
+    if (item.type === 'vocabulary') await unarchiveVocabulary(item.id);
+    else if (item.type === 'kanji') await unarchiveKanji(item.id);
+    else if (item.type === 'grammar') await unarchiveGrammar(item.id);
+  }
+}
+
 // -- Quiz --
 export async function fetchQuizItems(): Promise<any[]> {
   const userRef = getUserRef();

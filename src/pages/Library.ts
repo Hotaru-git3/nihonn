@@ -1,4 +1,4 @@
-import { fetchVocabulary, fetchKanji, fetchGrammar, fetchAllVocabulary, fetchAllKanji, fetchAllGrammar, createVocabulary, createKanji, createGrammar, deleteVocabulary, deleteKanji, deleteGrammar, archiveVocabulary, archiveKanji, archiveGrammar, unarchiveVocabulary, unarchiveKanji, unarchiveGrammar } from '../services/api';
+import { fetchVocabulary, fetchKanji, fetchGrammar, fetchAllVocabulary, fetchAllKanji, fetchAllGrammar, createVocabulary, createKanji, createGrammar, deleteVocabulary, deleteKanji, deleteGrammar, archiveVocabulary, archiveKanji, archiveGrammar, unarchiveVocabulary, unarchiveKanji, unarchiveGrammar, bulkArchiveItems, bulkDeleteItems, bulkUnarchiveItems } from '../services/api';
 import { showToast } from '../components/Toast';
 import { openModal, closeModal } from '../components/Modal';
 
@@ -7,8 +7,14 @@ let currentPage = 1;
 let currentSearch = '';
 let currentJlpt = '';
 let searchTimeout: any;
+let multiSelectMode = false;
+let selectedItems: { type: string; id: string }[] = [];
+let currentLibraryItems: any[] = [];
+let currentLibraryTotal = 0;
+let currentArchivedView = false;
 
 export async function renderLibrary(container: HTMLElement, archived = false) {
+  currentArchivedView = archived;
   container.innerHTML = `
     <header class="mb-stack_lg">
       <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
@@ -25,7 +31,13 @@ export async function renderLibrary(container: HTMLElement, archived = false) {
             <button class="lib-tab pb-3 px-2 font-body-md ${tab === currentTab ? 'font-semibold text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-primary transition-colors'}" data-tab="${tab}">${tab}</button>
           `).join('')}
         </div>
-        ${archived ? '' : `<button id="toggle-archive-all-grammar" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-outline-variant text-on-surface-variant hover:text-primary hover:border-primary transition-colors">Arsipkan semua</button>`}
+        <div class="flex items-center gap-2">
+          <button id="toggle-multi-select" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-outline-variant text-on-surface-variant hover:text-primary hover:border-primary transition-colors">
+            <span class="material-symbols-outlined text-[20px]">check_box_outline_blank</span>
+            Multi-select
+          </button>
+          ${archived ? '' : `<button id="toggle-archive-all-grammar" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-outline-variant text-on-surface-variant hover:text-primary hover:border-primary transition-colors">Arsipkan semua</button>`}
+        </div>
       </div>
     </header>
 
@@ -89,6 +101,7 @@ export async function renderLibrary(container: HTMLElement, archived = false) {
   `;
 
   attachEvents(container);
+  updateMultiSelectButton();
   await loadData(archived);
 }
 
@@ -119,6 +132,10 @@ function attachEvents(container: HTMLElement) {
 
   document.getElementById('btn-add')?.addEventListener('click', () => {
     openAddModal();
+  });
+
+  document.getElementById('toggle-multi-select')?.addEventListener('click', () => {
+    toggleMultiSelect();
   });
 
   document.getElementById('toggle-archive-all-grammar')?.addEventListener('click', () => {
@@ -195,7 +212,11 @@ async function loadData(archived = window.location.pathname === '/library/archiv
       items = items.slice(0, 10); // simple limit for mixed
     }
 
+    currentLibraryItems = items;
+    currentLibraryTotal = total;
+    currentArchivedView = archived;
     renderTable(items, total, archived);
+    updateMultiSelectButton();
     await updateArchiveAllButton(archived);
   } catch (err) {
     tableCont.innerHTML = `<div class="p-4 text-error">Failed to load data</div>`;
@@ -232,6 +253,82 @@ async function updateArchiveAllButton(archived = window.location.pathname === '/
   }
 }
 
+function updateMultiSelectButton() {
+  const button = document.getElementById('toggle-multi-select') as HTMLButtonElement | null;
+  if (!button) return;
+
+  button.classList.remove('hidden');
+  button.innerHTML = `
+    <span class="material-symbols-outlined text-[20px]">${multiSelectMode ? 'close' : 'check_box_outline_blank'}</span>
+    ${multiSelectMode ? 'Keluar multi-select' : 'Multi-select'}
+  `;
+}
+
+function getSelectionKey(type: string, id: string) {
+  return `${type}:${id}`;
+}
+
+function isItemSelected(type: string, id: string) {
+  return selectedItems.some(item => item.type === type && item.id === id);
+}
+
+function toggleMultiSelect() {
+  multiSelectMode = !multiSelectMode;
+  if (!multiSelectMode) {
+    selectedItems = [];
+  }
+  updateMultiSelectButton();
+  renderTable(currentLibraryItems, currentLibraryTotal, currentArchivedView);
+}
+
+function toggleItemSelection(type: string, id: string) {
+  const key = getSelectionKey(type, id);
+  const existing = selectedItems.some(item => getSelectionKey(item.type, item.id) === key);
+  if (existing) {
+    selectedItems = selectedItems.filter(item => getSelectionKey(item.type, item.id) !== key);
+  } else {
+    selectedItems = [...selectedItems, { type, id }];
+  }
+  renderTable(currentLibraryItems, currentLibraryTotal, currentArchivedView);
+}
+
+function selectAllVisible() {
+  if (!currentLibraryItems.length) return;
+
+  const allVisibleSelected = currentLibraryItems.every(item => isItemSelected(item.type, item.id));
+  if (allVisibleSelected) {
+    selectedItems = selectedItems.filter(selected => !currentLibraryItems.some(item => item.type === selected.type && item.id === selected.id));
+  } else {
+    const newlySelected = currentLibraryItems
+      .filter(item => !isItemSelected(item.type, item.id))
+      .map(item => ({ type: item.type, id: item.id }));
+    selectedItems = [...selectedItems, ...newlySelected];
+  }
+
+  renderTable(currentLibraryItems, currentLibraryTotal, currentArchivedView);
+}
+
+function cancelMultiSelect() {
+  multiSelectMode = false;
+  selectedItems = [];
+  updateMultiSelectButton();
+  renderTable(currentLibraryItems, currentLibraryTotal, currentArchivedView);
+}
+
+function bindBulkSelectionHandlers(container: HTMLElement) {
+  const selectAllCheckbox = container.querySelector('#bulk-select-all') as HTMLInputElement | null;
+  selectAllCheckbox?.addEventListener('change', () => {
+    selectAllVisible();
+  });
+
+  container.querySelectorAll('.bulk-item-checkbox').forEach((checkbox) => {
+    checkbox.addEventListener('change', (event) => {
+      const target = event.target as HTMLInputElement;
+      toggleItemSelection(target.dataset.type || '', target.dataset.id || '');
+    });
+  });
+}
+
 function renderTable(items: any[], total: number, archived = window.location.pathname === '/library/archive') {
   const tableCont = document.getElementById('table-container');
   if (!tableCont) return;
@@ -241,10 +338,14 @@ function renderTable(items: any[], total: number, archived = window.location.pat
     return;
   }
 
+  const showCheckboxes = multiSelectMode;
+  const allVisibleSelected = items.length > 0 && items.every(item => isItemSelected(item.type, item.id));
+
   const rowsHtml = items.map((item, idx) => {
     const isEven = idx % 2 === 0;
     const bgClass = isEven ? '' : 'bg-surface-container-low';
-    
+    const isSelected = isItemSelected(item.type, item.id);
+
     let front = item.word || item.character || item.pattern || '-';
     let reading = item.reading || (item.onyomi ? `${item.onyomi} / ${item.kunyomi}` : item.structure) || '-';
     let jlptClass = 'bg-primary/10 text-primary border-primary/20'; // default N5
@@ -252,7 +353,8 @@ function renderTable(items: any[], total: number, archived = window.location.pat
     if(item.jlpt_level === 'N3') jlptClass = 'bg-tertiary-container/10 text-tertiary-container border-tertiary-container/20';
 
     return `
-      <tr class="${bgClass} border-b border-outline-variant/50 hover:bg-primary/5 transition-colors group">
+      <tr class="${bgClass} ${isSelected ? 'bg-primary/5' : ''} border-b border-outline-variant/50 hover:bg-primary/5 transition-colors group">
+        ${showCheckboxes ? `<td class="p-4 w-12"><input type="checkbox" class="bulk-item-checkbox h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary" data-type="${item.type}" data-id="${item.id}" ${isSelected ? 'checked' : ''}></td>` : ''}
         <td class="p-4"><span class="font-japanese-text text-xl font-bold">${front}</span></td>
         <td class="p-4">
           <div class="text-sm text-on-surface-variant mb-1">${reading}</div>
@@ -279,6 +381,7 @@ function renderTable(items: any[], total: number, archived = window.location.pat
       <table class="w-full text-left border-collapse">
         <thead>
           <tr class="bg-surface-container border-b border-outline-variant">
+            ${showCheckboxes ? `<th class="p-4 w-12"><input id="bulk-select-all" type="checkbox" class="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary" ${allVisibleSelected ? 'checked' : ''}></th>` : ''}
             <th class="p-4 font-label-sm text-on-surface-variant uppercase">Kata/Kanji/Pola</th>
             <th class="p-4 font-label-sm text-on-surface-variant uppercase">Cara Baca/Arti</th>
             <th class="p-4 font-label-sm text-on-surface-variant uppercase w-24">Level</th>
@@ -297,7 +400,21 @@ function renderTable(items: any[], total: number, archived = window.location.pat
         <button class="px-3 py-1 border border-outline-variant rounded hover:bg-surface-container-high transition-colors" onclick="window.changePage(1)">Next</button>
       </div>
     </div>
+    ${multiSelectMode && selectedItems.length > 0 ? `
+      <div class="fixed bottom-24 md:bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-1.5rem)] max-w-md px-2">
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-outline-variant bg-surface shadow-lg px-4 py-3">
+          <div class="font-body-md font-semibold text-on-surface">${selectedItems.length} item dipilih</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button class="px-3 py-2 rounded-lg bg-primary text-on-primary text-sm font-semibold" onclick="window.${archived ? 'bulkUnarchiveSelected' : 'bulkArchiveSelected'}()">${archived ? 'Keluarkan dari arsip' : 'Arsipkan'} (${selectedItems.length})</button>
+            <button class="px-3 py-2 rounded-lg border border-outline-variant text-on-surface text-sm font-semibold" onclick="window.bulkDeleteSelected()">Hapus (${selectedItems.length})</button>
+            <button class="px-3 py-2 rounded-lg text-on-surface-variant text-sm font-semibold" onclick="window.cancelMultiSelect()">Batal</button>
+          </div>
+        </div>
+      </div>
+    ` : ''}
   `;
+
+  bindBulkSelectionHandlers(tableCont);
 }
 
 function openAddModal() {
@@ -376,6 +493,57 @@ function openAddModal() {
   } catch (err) {
     showToast('Gagal mengubah arsip item', 'error');
   }
+};
+
+(window as any).bulkArchiveSelected = async () => {
+  if (!selectedItems.length) return;
+
+  try {
+    await bulkArchiveItems(selectedItems);
+    showToast(`${selectedItems.length} item berhasil diarsipkan`, 'success');
+    multiSelectMode = false;
+    selectedItems = [];
+    updateMultiSelectButton();
+    await loadData(currentArchivedView);
+  } catch (err) {
+    showToast('Gagal mengarsipkan item terpilih', 'error');
+  }
+};
+
+(window as any).bulkUnarchiveSelected = async () => {
+  if (!selectedItems.length) return;
+
+  try {
+    await bulkUnarchiveItems(selectedItems);
+    showToast(`${selectedItems.length} item berhasil dikembalikan ke Library`, 'success');
+    multiSelectMode = false;
+    selectedItems = [];
+    updateMultiSelectButton();
+    await loadData(currentArchivedView);
+  } catch (err) {
+    showToast('Gagal mengembalikan item terpilih', 'error');
+  }
+};
+
+(window as any).bulkDeleteSelected = async () => {
+  if (!selectedItems.length) return;
+  const confirmed = window.confirm(`Hapus ${selectedItems.length} item terpilih?`);
+  if (!confirmed) return;
+
+  try {
+    await bulkDeleteItems(selectedItems);
+    showToast(`${selectedItems.length} item berhasil dihapus`, 'success');
+    multiSelectMode = false;
+    selectedItems = [];
+    updateMultiSelectButton();
+    await loadData(currentArchivedView);
+  } catch (err) {
+    showToast('Gagal menghapus item terpilih', 'error');
+  }
+};
+
+(window as any).cancelMultiSelect = () => {
+  cancelMultiSelect();
 };
 
 (window as any).toggleArchiveAll = async () => {
