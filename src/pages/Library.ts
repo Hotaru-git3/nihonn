@@ -1,4 +1,4 @@
-import { fetchVocabulary, fetchKanji, fetchGrammar, fetchAllVocabulary, fetchAllKanji, fetchAllGrammar, createVocabulary, createKanji, createGrammar, deleteVocabulary, deleteKanji, deleteGrammar, archiveVocabulary, archiveKanji, archiveGrammar, unarchiveVocabulary, unarchiveKanji, unarchiveGrammar, bulkArchiveItems, bulkDeleteItems, bulkUnarchiveItems } from '../services/api';
+import { fetchVocabulary, fetchKanji, fetchGrammar, fetchAllVocabulary, fetchAllKanji, fetchAllGrammar, createVocabulary, createKanji, createGrammar, deleteVocabulary, deleteKanji, deleteGrammar, archiveVocabulary, archiveKanji, archiveGrammar, unarchiveVocabulary, unarchiveKanji, unarchiveGrammar, bulkArchiveItems, bulkDeleteItems, bulkUnarchiveItems, updateVocabulary, updateKanji, updateGrammar } from '../services/api';
 import { showToast } from '../components/Toast';
 import { openModal, closeModal } from '../components/Modal';
 
@@ -329,6 +329,120 @@ function bindBulkSelectionHandlers(container: HTMLElement) {
   });
 }
 
+function escapeHtml(value: string) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function enterEditMode(type: string, id: string) {
+  const item = currentLibraryItems.find(item => item.id === id && item.type === type);
+  if (!item) return;
+
+  const frontKey = type === 'vocabulary' ? 'word' : type === 'kanji' ? 'character' : 'pattern';
+  const frontLabel = type === 'vocabulary' ? 'Kata' : type === 'kanji' ? 'Kanji' : 'Pola';
+  const readingLabel = type === 'vocabulary' ? 'Cara Baca' : type === 'kanji' ? 'Onyomi / Kunyomi' : 'Struktur';
+  const frontValue = item[frontKey] || '';
+  const readingValue = item.reading || (item.onyomi ? `${item.onyomi} / ${item.kunyomi}` : item.structure) || '';
+  const meaningValue = item.meaning || '';
+  const exampleValue = item.example_sentence || item.example_words || item.example || '';
+  const levelValue = item.jlpt_level || 'N5';
+
+  const content = `
+    <div class="space-y-4">
+      <div>
+        <label class="block font-label-sm text-on-surface-variant mb-1">${frontLabel}</label>
+        <input id="edit-front" type="text" value="${escapeHtml(frontValue)}" class="w-full bg-surface border border-outline-variant rounded-[12px] px-4 py-2 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 font-japanese-text text-on-background transition-all"/>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block font-label-sm text-on-surface-variant mb-1">${readingLabel}</label>
+          <input id="edit-reading" type="text" value="${escapeHtml(readingValue)}" class="w-full bg-surface border border-outline-variant rounded-[12px] px-4 py-2 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 font-japanese-text text-on-background transition-all"/>
+        </div>
+        <div>
+          <label class="block font-label-sm text-on-surface-variant mb-1">Level JLPT</label>
+          <select id="edit-level" class="w-full bg-surface border border-outline-variant rounded-[12px] px-4 py-2 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 font-body-md text-on-background transition-all cursor-pointer">
+            ${['N5','N4','N3','N2','N1'].map(n => `<option value="${n}" ${levelValue === n ? 'selected' : ''}>${n}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block font-label-sm text-on-surface-variant mb-1">Arti</label>
+        <input id="edit-meaning" type="text" value="${escapeHtml(meaningValue)}" class="w-full bg-surface border border-outline-variant rounded-[12px] px-4 py-2 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 font-body-md text-on-background transition-all"/>
+      </div>
+      <div>
+        <label class="block font-label-sm text-on-surface-variant mb-1">Contoh Kalimat / Kosakata Terkait (Opsional)</label>
+        <textarea id="edit-example" rows="2" class="w-full bg-surface border border-outline-variant rounded-[12px] px-4 py-2 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 font-japanese-text text-on-background transition-all">${escapeHtml(exampleValue)}</textarea>
+      </div>
+      <div class="flex justify-end gap-3 pt-4 border-t border-outline-variant">
+        <button onclick="window.cancelEdit()" class="px-5 py-2 rounded-lg font-body-md font-semibold text-primary hover:bg-primary/10 transition-colors">Batal</button>
+        <button onclick="window.saveEdit('${type}', '${id}')" class="bg-primary text-on-primary px-5 py-2 rounded-lg font-body-md font-semibold hover:bg-primary/90 transition-colors shadow-sm">Simpan</button>
+      </div>
+    </div>
+  `;
+
+  openModal('Edit Item', content);
+}
+
+function exitEditMode() {
+}
+
+async function saveEdit(type: string, id: string) {
+  const frontInput = document.getElementById('edit-front') as HTMLInputElement | null;
+  const readingInput = document.getElementById('edit-reading') as HTMLInputElement | null;
+  const meaningInput = document.getElementById('edit-meaning') as HTMLInputElement | null;
+  const exampleInput = document.getElementById('edit-example') as HTMLTextAreaElement | null;
+  const levelInput = document.getElementById('edit-level') as HTMLSelectElement | null;
+
+  const front = frontInput?.value.trim() || '';
+  const reading = readingInput?.value.trim() || '';
+  const meaning = meaningInput?.value.trim() || '';
+  const example = exampleInput?.value.trim() || '';
+  const level = levelInput?.value || '';
+
+  if (!front) {
+    showToast('Front tidak boleh kosong', 'error');
+    return;
+  }
+
+  if (!meaning) {
+    showToast('Meaning tidak boleh kosong', 'error');
+    return;
+  }
+
+  if (!['N5', 'N4', 'N3', 'N2', 'N1'].includes(level)) {
+    showToast('Level harus dipilih', 'error');
+    return;
+  }
+
+  try {
+    const payload = {
+      ...(type === 'vocabulary' ? { word: front, reading, meaning, jlpt_level: level, example_sentence: example } : {}),
+      ...(type === 'kanji' ? { character: front, onyomi: reading, meaning, jlpt_level: level, example_words: example } : {}),
+      ...(type === 'grammar' ? { pattern: front, structure: reading, meaning, jlpt_level: level, example_sentence: example } : {})
+    };
+
+    if (type === 'vocabulary') await updateVocabulary(id, payload);
+    if (type === 'kanji') await updateKanji(id, payload);
+    if (type === 'grammar') await updateGrammar(id, payload);
+
+    closeModal();
+    exitEditMode();
+    showToast('Item berhasil diperbarui', 'success');
+    await loadData(currentArchivedView);
+  } catch (err) {
+    showToast('Gagal memperbarui item', 'error');
+  }
+}
+
+function cancelEdit() {
+  closeModal();
+  exitEditMode();
+}
+
 function renderTable(items: any[], total: number, archived = window.location.pathname === '/library/archive') {
   const tableCont = document.getElementById('table-container');
   if (!tableCont) return;
@@ -364,6 +478,9 @@ function renderTable(items: any[], total: number, archived = window.location.pat
         <td class="p-4 text-on-surface-variant text-sm">${new Date(item.created_at).toLocaleDateString('id-ID')}</td>
         <td class="p-4 text-center">
           <div class="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button class="p-1 text-on-surface-variant hover:text-primary transition-colors" title="Edit item" onclick="window.enterEditMode('${item.type}', '${item.id}')">
+              <span class="material-symbols-outlined text-[20px]">edit</span>
+            </button>
             <button class="p-1 text-on-surface-variant hover:text-primary transition-colors" title="${archived ? 'Keluarkan dari arsip' : 'Arsipkan item'}" onclick="window.toggleArchiveItem('${item.type}', '${item.id}', ${archived})">
               <span class="material-symbols-outlined text-[20px]">${archived ? 'unarchive' : 'archive'}</span>
             </button>
@@ -469,6 +586,18 @@ function openAddModal() {
 (window as any).changePage = (delta: number) => {
   currentPage += delta;
   loadData();
+};
+
+(window as any).enterEditMode = (type: string, id: string) => {
+  enterEditMode(type, id);
+};
+
+(window as any).saveEdit = async (type: string, id: string) => {
+  await saveEdit(type, id);
+};
+
+(window as any).cancelEdit = () => {
+  cancelEdit();
 };
 
 (window as any).deleteItem = async (type: string, id: string) => {
