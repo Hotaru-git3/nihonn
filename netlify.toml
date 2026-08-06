@@ -3,10 +3,15 @@
   publish = "dist"
   functions = "netlify/functions"
 
-# Redirect Vercel-style /api/* to Netlify Functions
+# Redirect specific API endpoints to Netlify Functions
 [[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
+  from = "/api/ai/breakdown"
+  to = "/.netlify/functions/ai-breakdown"
+  status = 200
+
+[[redirects]]
+  from = "/api/quiz/generate"
+  to = "/.netlify/functions/quiz-generate"
   status = 200
 
 # Environment variables can be set in Netlify UI or here under [build.environment]
