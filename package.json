@@ -6,6 +6,7 @@
     "start": "tsx backend/server.ts",
     "dev": "concurrently \"vite\" \"tsx backend/server.ts\"",
     "build": "tsc && vite build",
+    "build:netlify": "npm run build",
     "preview": "vite preview"
   },
   "dependencies": {

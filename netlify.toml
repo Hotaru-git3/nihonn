@@ -1,0 +1,18 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+# Redirect Vercel-style /api/* to Netlify Functions
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Environment variables can be set in Netlify UI or here under [build.environment]
+# Do NOT commit secrets. Example placeholders (leave empty or set in Netlify UI):
+[build.environment]
+  # NVIDIA_API_KEY = ""
+  # NVIDIA_API_KEY_LLAMA = ""
+  # NVIDIA_API_KEY_LLAMA2 = ""
+  # NVIDIA_API_KEY_DEEPSEEK = ""
