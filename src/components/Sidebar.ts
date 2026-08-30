@@ -15,8 +15,12 @@ export function Sidebar(): string {
     <aside id="app-sidebar" class="fixed left-0 top-0 h-full w-[260px] hidden lg:flex flex-col bg-surface z-40 border-r border-outline-variant/50 transition-all duration-300">
       <div class="flex flex-col p-6 space-y-6 h-full">
         <!-- Brand -->
-        <div class="flex items-center pl-2">
+        <div class="flex items-center justify-between pl-2">
           <h1 class="font-serif text-[28px] font-bold text-rupiahku-brown tracking-tight">Nihongo.</h1>
+          <!-- Toggle collapse (desktop only) -->
+          <button id="sidebar-toggle" aria-label="Toggle sidebar" class="hidden lg:inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-surface-container-high transition-all duration-200">
+            <span id="sidebar-toggle-icon" class="material-symbols-outlined text-on-surface-variant text-lg">fullscreen</span>
+          </button>
         </div>
         
         <!-- Profile -->

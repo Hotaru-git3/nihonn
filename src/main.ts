@@ -52,6 +52,9 @@ async function initApp() {
   // 🔥 Render app
   app.innerHTML = `
     ${Sidebar()}
+    <button id="sidebar-toggle-floating" aria-label="Open sidebar" class="hidden lg:inline-flex items-center justify-center w-9 h-9 rounded-lg fixed left-4 top-4 z-50 bg-surface hover:bg-surface-container-high transition-all duration-200">
+      <span id="sidebar-toggle-floating-icon" class="material-symbols-outlined text-on-surface-variant text-lg">chevron_right</span>
+    </button>
     ${BottomNav()}
     <main id="main-content" class="flex-1 lg:ml-[260px] p-4 md:p-main_padding pb-24 lg:pb-main_padding min-h-screen bg-background min-w-0 overflow-x-hidden"></main>
     ${ToastContainer()}
@@ -78,6 +81,43 @@ async function initApp() {
   // Initial load
   router();
   initProfileListeners();
+
+  // Sidebar collapse/expand (desktop only)
+  const sidebarToggle = document.getElementById('sidebar-toggle');
+  const sidebarToggleIcon = document.getElementById('sidebar-toggle-icon');
+
+  function setSidebarCollapsed(collapsed: boolean) {
+    if (collapsed) {
+      document.body.classList.add('sidebar-collapsed');
+      localStorage.setItem('sidebarCollapsed', '1');
+      if (sidebarToggleIcon) sidebarToggleIcon.textContent = 'fullscreen_exit';
+    } else {
+      document.body.classList.remove('sidebar-collapsed');
+      localStorage.removeItem('sidebarCollapsed');
+      if (sidebarToggleIcon) sidebarToggleIcon.textContent = 'fullscreen';
+    }
+  }
+
+  // initialize from localStorage
+  const stored = localStorage.getItem('sidebarCollapsed');
+  if (stored === '1') setSidebarCollapsed(true);
+
+  if (sidebarToggle) {
+    sidebarToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      const collapsed = document.body.classList.toggle('sidebar-collapsed');
+      setSidebarCollapsed(collapsed);
+    });
+  }
+
+  // Floating toggle (visible when sidebar is collapsed)
+  const floatingToggle = document.getElementById('sidebar-toggle-floating');
+  if (floatingToggle) {
+    floatingToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      setSidebarCollapsed(false);
+    });
+  }
 }
 
 document.addEventListener('DOMContentLoaded', initApp);

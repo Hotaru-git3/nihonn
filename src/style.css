@@ -176,3 +176,32 @@ body.login-page #main-content {
   padding: 0 !important;
 }
 
+/* Sidebar collapsed (desktop only) */
+@media (min-width: 1024px) {
+  body.sidebar-collapsed #app-sidebar {
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+    width: 0 !important;
+  }
+
+  /* remove left margin on main content when collapsed */
+  body.sidebar-collapsed #main-content {
+    margin-left: 0 !important;
+    transition: margin-left 0.25s ease-in-out;
+  }
+
+  /* smooth sidebar transition */
+  #app-sidebar {
+    transition: transform 0.25s ease-in-out, opacity 0.25s ease-in-out;
+  }
+}
+
+/* Floating toggle: show only on desktop when sidebar is collapsed */
+#sidebar-toggle-floating { display: none; }
+@media (min-width: 1024px) {
+  body.sidebar-collapsed #sidebar-toggle-floating {
+    display: inline-flex;
+  }
+}
+
