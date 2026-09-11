@@ -14,12 +14,13 @@
   to = "/.netlify/functions/quiz-generate"
   status = 200
 
-# SPA fallback: redirect all non-file routes to index.html to avoid Netlify 404 on refresh
+# SPA fallback: only rewrite real app routes to index.html.
+# Do NOT force this for asset URLs like /assets/*.js or /assets/*.css,
+# otherwise Netlify serves HTML instead of the compiled module files.
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-  force = true
 
 # Environment variables can be set in Netlify UI or here under [build.environment]
 # Do NOT commit secrets. Example placeholders (leave empty or set in Netlify UI):
