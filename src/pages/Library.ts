@@ -6,6 +6,7 @@ let currentTab = 'Semua';
 let currentPage = 1;
 let currentSearch = '';
 let currentJlpt = '';
+let currentSortDesc = true; // true = newest first, false = oldest first
 let searchTimeout: any;
 let multiSelectMode = false;
 let selectedItems: { type: string; id: string }[] = [];
@@ -53,6 +54,11 @@ export async function renderLibrary(container: HTMLElement, archived = false) {
             ${['N5','N4','N3','N2','N1'].map(n => `<option value="${n}" ${n === currentJlpt ? 'selected' : ''}>${n}</option>`).join('')}
           </select>
           <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">arrow_drop_down</span>
+        </div>
+        <div class="flex items-center">
+          <button id="sort-toggle" type="button" title="Urutkan (terbaru/terlama)" class="inline-flex items-center justify-center w-10 h-10 ml-2 rounded-lg border border-outline-variant text-on-surface-variant hover:text-primary hover:border-primary transition-colors">
+            <span id="sort-icon" class="material-symbols-outlined text-[20px]">${currentSortDesc ? 'arrow_downward' : 'arrow_upward'}</span>
+          </button>
         </div>
       </div>
       <button id="btn-add" class="${archived ? 'hidden' : ''} w-full md:w-auto bg-primary text-on-primary px-6 py-2 rounded-lg font-body-md font-semibold hover:bg-primary/90 transition-colors shadow-sm flex items-center justify-center gap-2">
@@ -102,6 +108,7 @@ export async function renderLibrary(container: HTMLElement, archived = false) {
 
   attachEvents(container);
   updateMultiSelectButton();
+  updateSortButton();
   await loadData(archived);
 }
 
@@ -126,6 +133,13 @@ function attachEvents(container: HTMLElement) {
 
   document.getElementById('jlpt-filter')?.addEventListener('change', (e) => {
     currentJlpt = (e.target as HTMLSelectElement).value;
+    currentPage = 1;
+    loadData();
+  });
+
+  document.getElementById('sort-toggle')?.addEventListener('click', () => {
+    currentSortDesc = !currentSortDesc;
+    updateSortButton();
     currentPage = 1;
     loadData();
   });
@@ -207,9 +221,22 @@ async function loadData(archived = window.location.pathname === '/library/archiv
     }
 
     if (currentTab === 'Semua') {
-      // Sort mixed by date
-      items.sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
+      // Sort mixed by date according to currentSortDesc
+      items.sort((a, b) => {
+        const ta = new Date(a.created_at || '').getTime();
+        const tb = new Date(b.created_at || '').getTime();
+        return currentSortDesc ? tb - ta : ta - tb;
+      });
       items = items.slice(0, 10); // simple limit for mixed
+    }
+
+    // For non-mixed tabs, also apply sort by created_at
+    if (currentTab !== 'Semua') {
+      items.sort((a, b) => {
+        const ta = new Date(a.created_at || '').getTime();
+        const tb = new Date(b.created_at || '').getTime();
+        return currentSortDesc ? tb - ta : ta - tb;
+      });
     }
 
     currentLibraryItems = items;
@@ -262,6 +289,15 @@ function updateMultiSelectButton() {
     <span class="material-symbols-outlined text-[20px]">${multiSelectMode ? 'close' : 'check_box_outline_blank'}</span>
     ${multiSelectMode ? 'Keluar multi-select' : 'Multi-select'}
   `;
+}
+
+function updateSortButton() {
+  const btn = document.getElementById('sort-toggle') as HTMLButtonElement | null;
+  const icon = document.getElementById('sort-icon') as HTMLElement | null;
+  if (!btn || !icon) return;
+  icon.textContent = currentSortDesc ? 'arrow_downward' : 'arrow_upward';
+  btn.setAttribute('aria-pressed', String(!currentSortDesc));
+  btn.title = currentSortDesc ? 'Urutkan: terbaru dulu' : 'Urutkan: terlama dulu';
 }
 
 function getSelectionKey(type: string, id: string) {
